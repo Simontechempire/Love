@@ -11,19 +11,37 @@ const PORT = config.port;
 app.use(express.static(path.join(__dirname, 'Public')));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'Public', 'index.html')));
 app.get('/api/status', (req, res) => {
-  const { formatUptime } = require('./Lib/function');
-  res.json({
-    online: true,
-    botName: config.botName,
-    owner: config.ownerName,
-    uptime: formatUptime(process.uptime() * 1000),
-    plugins: plugins.length,
-    memory: (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(0) + ' MB',
-    version: config.version,
-    prefix: config.prefix,
-  });
+  res.json({ online: true, botName: config.botName, uptime: formatUptime(process.uptime()*1000), plugins: plugins.length, memory: (process.memoryUsage().heapUsed/1024/1024).toFixed(0)+' MB' });
 });
-app.listen(PORT, () => console.log(`[LOVE] Web on ${PORT}`));
+
+// ===== PAIR VIA URL - https://your-render-url.onrender.com/pair =====
+let lastPairCode = null;
+let lastPairPhone = null;
+app.get('/pair', (req, res) => {
+  res.send(`
+  <html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>LOVE Pair</title>
+  <style>body{background:#0f0f0f;color:#fff;font-family:sans-serif;text-align:center;padding:30px} .card{background:#1a1a1a;border:2px solid #ff2e63;border-radius:20px;padding:24px;max-width:400px;margin:auto} input{width:100%;padding:14px;border-radius:10px;border:none;margin:10px 0;font-size:16px} button{background:#ff2e63;color:#fff;border:none;padding:14px;width:100%;border-radius:10px;font-weight:700;font-size:16px} code{font-size:28px;letter-spacing:5px;color:#ff2e63;font-weight:800}</style>
+  </head><body><div class="card">
+  <h2>◈ <span style="color:#ff2e63">LOVE</span> ◈ Pair</h2>
+  <p>Enter your WhatsApp number to get pairing code</p>
+  <form action="/pair-code" method="get">
+    <input name="phone" placeholder="2348071569915" value="${lastPairPhone||'2348071569915'}" required />
+    <button type="submit">Get Pairing Code</button>
+  </form>
+  ${lastPairCode ? `<p style="margin-top:20px">Your Code:<br><code>${lastPairCode}</code><br><br><small>WhatsApp > Linked Devices > Link with phone number > Enter this code<br>Code expires in 20s - refresh if e fail</small></p>` : `<p style="color:#aaa;font-size:13px;margin-top:16px">Code will show here after you submit</p>`}
+  <p style="margin-top:20px"><a href="/" style="color:#ff2e63">← Back to Dashboard</a></p>
+  </div></body></html>`);
+});
+app.get('/pair-code', async (req, res) => {
+  const phone = (req.query.phone||'').replace(/[^0-9]/g,'');
+  if(!phone) return res.redirect('/pair');
+  try{
+    lastPairPhone = phone;
+    lastPairCode = await globalThis.__loveSock.requestPairingCode(phone);
+    console.log(`[PAIR VIA URL] ${phone} -> ${lastPairCode}`);
+  }catch(e){ lastPairCode = 'ERROR: '+e.message; }
+  res.redirect('/pair');
+});
 
 // ===== HELPERS =====
 function ensureDir(p){ if(!fs.existsSync(p)) fs.mkdirSync(p,{recursive:true}); }
