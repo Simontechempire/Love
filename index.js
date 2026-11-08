@@ -1,224 +1,358 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require("@whiskeysockets/baileys");
-const express = require("express");
-const pino = require("pino");
-const path = require("path");
-const fs = require("fs");
-const config = require("./config");
-
-let gcStatus = null;
-try { gcStatus = require("./gcstatus"); } catch { console.log("[WARN] gcstatus.js not found, skip"); }
-
-// ===== HELPERS - NOT LINKING =====
-function ensureDir(p){ if(!fs.existsSync(p)) fs.mkdirSync(p,{recursive:true}); }
-function readJson(file, def){ try{ if(fs.existsSync(file)) return JSON.parse(fs.readFileSync(file)); }catch{} return def; }
-function writeJson(file, data){ ensureDir(path.dirname(file)); fs.writeFileSync(file, JSON.stringify(data,null,2)); }
-function normalize(str){
-  if(!str) return '';
-  const map = { 'ᴀ':'a','ʙ':'b','ᴄ':'c','ᴅ':'d','ᴇ':'e','ꜰ':'f','ɢ':'g','ʜ':'h','ɪ':'i','ᴊ':'j','ᴋ':'k','ʟ':'l','ᴍ':'m','ɴ':'n','ᴏ':'o','ᴘ':'p','ǫ':'q','ʀ':'r','ꜱ':'s','ᴛ':'t','ᴜ':'u','ᴠ':'v','ᴡ':'w','x':'x','ʏ':'y','ᴢ':'z' };
-  let out = '';
-  for(const ch of str.toLowerCase()) out += map[ch] || ch;
-  return out.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-}
-
-// ===== UNIVERSAL PLUGIN LOADER - UNCHANGED =====
-function getPluginDir(){
-  const cands = [path.join(__dirname,'Plugins'), path.join(__dirname,'plugins'), path.join(__dirname,'Plugin'), path.join(__dirname,'commands')];
-  for(const c of cands) if(fs.existsSync(c)) return c;
-  return cands[0];
-}
-function loadPlugins(){
-  const dir = getPluginDir();
-  const commandPlugins = [];
-  const messageHandlers = [];
-  const eventHandlers = [];
-  if(!fs.existsSync(dir)){ console.log('[LOVE] No Plugins folder found:', dir); return {commandPlugins, messageHandlers, eventHandlers, files:[]}; }
-  const files = fs.readdirSync(dir).filter(f => f.endsWith('.js'));
-  for(const file of files){
-    const full = path.join(dir, file);
-    try{
-      delete require.cache[require.resolve(full)];
-      let mod = require(full);
-      if(mod && mod.default) mod = mod.default;
-      const items = Array.isArray(mod) ? mod : [mod];
-      for(const item of items){
-        if(!item) continue;
-        if(typeof item === 'function'){ messageHandlers.push({ file, fn: item }); console.log(`[LOVE] Loaded message-handler: ${file}`); continue; }
-        if(typeof item !== 'object') continue;
-        const name = item.name || item.command || item.cmd || item.pattern;
-        const runFn = item.run || item.execute || item.handler || item.callback || item.action;
-        if(name && typeof runFn === 'function'){
-          const alias = item.alias || item.aliases || item.commands || [];
-          commandPlugins.push({ name: String(name), alias: Array.isArray(alias)?alias:[alias].filter(Boolean), run: runFn, file, raw: item, prefix: item.prefix, category: item.category || item.type || 'general', desc: item.desc || item.description || '' });
-          console.log(`[LOVE] Loaded command: .${name} (${file})`); continue;
-        }
-        const onMsg = item.onMessage || item.onMsg || item.message || item.handleMessage;
-        if(typeof onMsg === 'function'){ messageHandlers.push({ file, fn: onMsg, raw: item }); console.log(`[LOVE] Loaded onMessage: ${file}`); continue; }
-        if(item.event && typeof (item.handler || item.run) === 'function'){ eventHandlers.push({ event: item.event, handler: item.handler || item.run, file }); console.log(`[LOVE] Loaded event: ${item.event} (${file})`); continue; }
-        if(Array.isArray(item.commands)){
-          for(const c of item.commands){
-            if(c?.name && typeof (c.run||c.execute)==='function'){ commandPlugins.push({ name: c.name, alias: c.alias||c.aliases||[], run: c.run||c.execute, file, raw: c }); console.log(`[LOVE] Loaded nested command: .${c.name} (${file})`); }
-          }
-          continue;
-        }
-        const keys = Object.keys(item);
-        let loaded = 0;
-        for(const k of keys){
-          if(typeof item[k] === 'function' && !['run','execute'].includes(k)){ commandPlugins.push({ name: k, alias: [], run: item[k], file, raw: item }); console.log(`[LOVE] Loaded object-command: .${k} (${file})`); loaded++; }
-        }
-        if(loaded===0) console.log(`[LOVE] ⚠️ Skipped (no name/run found): ${file} keys=${keys.join(',')}`);
-      }
-    }catch(e){ console.log(`[PLUGIN ERROR] ${file}:`, e.message); }
-  }
-  console.log(`[LOVE] Total: ${commandPlugins.length} commands + ${messageHandlers.length} message-handlers + ${eventHandlers.length} event-handlers from ${files.length} files`);
-  return { commandPlugins, messageHandlers, eventHandlers, files };
-}
-let PLUGINS = loadPlugins();
-setInterval(()=>{ PLUGINS = loadPlugins(); }, 60000);
-
-let getBuffer, formatUptime;
-try { ({ getBuffer, formatUptime } = require('./Lib/function')); } catch { try { ({ getBuffer, formatUptime } = require('./lib/function')); } catch { getBuffer = async()=>null; formatUptime = (ms)=> Math.floor(ms/1000)+'s'; } }
-
-// ===== EXPRESS - Public case-proof =====
+// LOVE - INDEX.JS - NEW METHOD - SIMON TECH INC
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, Browsers } = require('@whiskeysockets/baileys');
+const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const pino = require('pino');
+const config = require('./config');
+const F = require('./lib/function');
+const { getMenu, MENU_PFP } = require('./lib/menu');
 const app = express();
 app.use(express.json());
-let publicDir = path.join(__dirname, "Public");
-if (!fs.existsSync(publicDir)) publicDir = path.join(__dirname, "public");
-console.log("[LOVE] Public dir:", publicDir, "exists:", fs.existsSync(publicDir));
-if (fs.existsSync(publicDir)) console.log("[LOVE] Files in Public:", fs.readdirSync(publicDir));
+// Public case-proof - Public vs public
+let publicDir = path.join(__dirname, 'Public');
+if (!fs.existsSync(publicDir)) publicDir = path.join(__dirname, 'public');
 app.use(express.static(publicDir));
-
-let sock;
+const PORT = config.port || process.env.PORT || 10000;
+let sock = null;
+let db = F.loadDB() || {};
 let isStarting = false;
-
-// =================================================================
-// ===== LINKING PART - EXACTLY YOUR GC STATUS FILE - DO NOT EDIT =====
-// =================================================================
-async function startBot() {
-  if (sock) return sock;
-  if (isStarting) {
-    while (isStarting) await new Promise(r => setTimeout(r, 500));
-    return sock;
-  }
-  isStarting = true;
-  const { state, saveCreds } = await useMultiFileAuthState("session");
-  sock = makeWASocket({ auth: state, logger: pino({ level: "silent" }), printQRInTerminal: false });
-  sock.ev.on("creds.update", saveCreds);
-  sock.ev.on("connection.update", (u) => {
-    if (u.connection === "open") console.log("✅ Connected - GC STATUS Ready");
-    if (u.connection === "close") {
-      const re = u.lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
-      sock = null;
-      isStarting = false;
-      if (re) startBot();
-    }
-  });
-
-  // Attach plugin event handlers (not linking)
-  for(const ev of PLUGINS.eventHandlers){
-    try{ sock.ev.on(ev.event, (data)=> ev.handler({sock, data, config})); }catch(e){ console.log('[EVENT ERR]', e.message); }
-  }
-
-  sock.ev.on("messages.upsert", async ({ messages }) => {
-    const msg = messages[0];
-    if (!msg.message) return;
-    if (msg.key.fromMe) return;
-    const m = msg.message;
-    const mtype = Object.keys(m)[0];
-    const content = m[mtype];
-    const body = m.conversation || content?.text || content?.caption || m.extendedTextMessage?.text || m.imageMessage?.caption || m.videoMessage?.caption || "";
-    const text = body.toLowerCase().trim();
-
-    // FIX SPAM LOOP: Ignore bot's own replies - YOUR METHOD
-    if (body.startsWith("❌") || body.startsWith("⏳") || body.startsWith("Pong") || body.startsWith("Order Complete") || body.startsWith("✅")) return;
-
-    const from = msg.key.remoteJid;
-    const isGroup = from.endsWith('@g.us');
-    const sender = isGroup ? (msg.key.participant || msg.participant) : from;
-    const pushName = msg.pushName || 'User';
-
-    if (text === ".ping") {
-      await sock.sendMessage(from, { text: "Pong! ✅ LOVE BOT is alive" });
-      return;
-    }
-    if (text.includes(".gcstatus") && gcStatus) {
-      await gcStatus(sock, msg, config);
-      return;
-    }
-
-    // ===== PLUGINS HANDLE - NOT LINKING =====
-    const quotedMsg = content?.contextInfo?.quotedMessage;
-    const quoted = quotedMsg ? { key: { remoteJid: from, id: content?.contextInfo?.stanzaId, participant: content?.contextInfo?.participant }, message: quotedMsg, mtype: Object.keys(quotedMsg)[0], text: quotedMsg.conversation || quotedMsg.extendedTextMessage?.text || quotedMsg.imageMessage?.caption || quotedMsg.videoMessage?.caption || '', caption: quotedMsg.imageMessage?.caption || quotedMsg.videoMessage?.caption || '', sender: content?.contextInfo?.participant } : null;
-    const msgObj = { ...msg, mtype, text: body, body, sender, from, pushName, mentionedJid: content?.contextInfo?.mentionedJid || [], quoted, isGroup, isOwner: false };
-    const cfg = readJson(path.join(__dirname,'Lib/data/config.json'), {});
-    const isOwner = sender.split('@')[0] === String(config.ownerNumber) || (cfg.sudo||[]).includes(sender) || (config.ownerNumbers||[]).includes(sender.split('@')[0]);
-    const isMod = (cfg.mods||[]).includes(sender);
-    msgObj.isOwner = isOwner;
-    if(cfg.mode === 'private' && !isOwner && !isMod) return;
-    if(cfg.mode === 'self' && !isOwner) return;
-
-    const reply = (t, opts={}) => sock.sendMessage(from, { text: t, mentions:[sender], ...opts });
-    const ctx = { sock, from, msg: msgObj, sender, pushName, args: [], text: body, pluginCount: PLUGINS.commandPlugins.length, plugins: PLUGINS.commandPlugins, config, isOwner, isMod, isGroup, reply, getBuffer, formatUptime, quoted, mentionedJid: msgObj.mentionedJid };
-
-    for(const h of PLUGINS.messageHandlers){
-      try{ await h.fn(ctx); if(h.fn.length >= 2) await h.fn(sock, msgObj); }catch(e){ console.log(`[HANDLER ERR] ${h.file}:`, e.message); }
-    }
-
-    if (!body.startsWith(config.prefix)) return;
-    const args = body.slice(config.prefix.length).trim().split(/ +/);
-    const cmdName = normalize(args.shift() || '');
-    if(!cmdName) return;
-    const plugin = PLUGINS.commandPlugins.find(p => normalize(p.name) === cmdName || (p.alias||[]).some(a => normalize(a) === cmdName));
-    if (!plugin) return;
-    ctx.args = args;
-    ctx.text = args.join(' ');
-    ctx.command = cmdName;
-    console.log(`[LOVE] Running .${plugin.name} from ${pushName} (${plugin.file})`);
-    try { await plugin.run(ctx); } catch (e) {
-      console.log(`[CMD ERR] ${plugin.name}:`, e);
-      await sock.sendMessage(from, { text: `❌ Error in .${plugin.name}: ${e.message}`, mentions:[sender] });
-    }
-  });
-  isStarting = false;
-  return sock;
+let reconnectTimer = null;
+if (!db.settings) db.settings = {};
+if (!db.anti) db.anti = {};
+if (!db.group) db.group = {};
+if (!db.auto) db.auto = {};
+if (!db.warns) db.warns = {};
+function fancy(text){
+  const map={a:'𝐚',b:'𝐛',c:'𝐜',d:'𝐝',e:'𝐞',f:'𝐟',g:'𝐠',h:'𝐡',i:'𝐢',j:'𝐣',k:'𝐤',l:'𝐥',m:'𝐦',n:'𝐧',o:'𝐨',p:'𝐩',q:'𝐪',r:'𝐫',s:'𝐬',t:'𝐭',u:'𝐮',v:'𝐯',w:'𝐰',x:'𝐱',y:'𝐲',z:'𝐳',A:'𝐀',B:'𝐁',C:'𝐂',D:'𝐃',E:'𝐄',F:'𝐅',G:'𝐆',H:'𝐇',I:'𝐈',J:'𝐉',K:'𝐊',L:'𝐋',M:'𝐌',N:'𝐍',O:'𝐎',P:'𝐏',Q:'𝐐',R:'𝐑',S:'𝐒',T:'𝐓',U:'𝐔',V:'𝐕',W:'𝐖',X:'𝐗',Y:'𝐘',Z:'𝐙',0:'𝟎',1:'𝟏',2:'𝟐',3:'𝟑',4:'𝟒',5:'𝟓',6:'𝟔',7:'𝟕',8:'𝟖',9:'𝟗'};
+  return String(text).split('').map(c=>map[c]||c).join('');
 }
-
-// ===== PAIR - EXACTLY YOUR GC STATUS FILE =====
-app.post("/pair", async (req, res) => {
-  try {
-    if (!sock) await startBot();
-    await new Promise(r => setTimeout(r, 2000));
-    const number = req.body.number.replace(/[^0-9]/g, "");
-    const code = await sock.requestPairingCode(number);
-    res.json({ code });
-  } catch (e) { res.json({ error: e.message }); }
+F.fancy = fancy; F.bold = fancy;
+function getNums(...jids){
+  let out=[];
+  for(let j of jids){ let n=String(j||'').split('@')[0].split(':')[0].replace(/[^0-9]/g,''); if(n) out.push(n); }
+  return [...new Set(out)];
+}
+function isOwnerCheck(sender, senderPn, database){
+  let nums = getNums(sender, senderPn);
+  if(!nums.length) return false;
+  let owners=[];
+  if(config.ownerNumber) owners.push(...getNums(config.ownerNumber));
+  if(database.owner) owners.push(...getNums(database.owner));
+  if(Array.isArray(database.owners)) database.owners.forEach(o=>owners.push(...getNums(o)));
+  if(Array.isArray(config.owners)) config.owners.forEach(o=>owners.push(...getNums(o)));
+  if(database.settings?.owner) owners.push(...getNums(database.settings.owner));
+  try{ if(F.isOwner && (F.isOwner(sender, database) || F.isOwner(senderPn, database))) return true; }catch{}
+  return nums.some(n=>owners.includes(n));
+}
+function getMode(database){
+  if(config.forceMode && config.mode) return String(config.mode).toLowerCase()==='private' ? 'private' : 'public';
+  const mode = database.settings?.mode || database.mode || config.mode || 'public';
+  return String(mode).toLowerCase()==='private' ? 'private' : 'public';
+}
+function getPrefixes(){
+  let p = db.settings?.prefix || config.prefix || '.';
+  let list = [];
+  if(Array.isArray(config.prefixes)) list.push(...config.prefixes);
+  list.push(p);
+  if(config.prefix && !list.includes(config.prefix)) list.push(config.prefix);
+  return [...new Set(list)];
+}
+let commands = new Map();
+let functionPlugins = [];
+let handlerMods = [];
+function extractCommands(plugin){
+  let list=[];
+  if(!plugin) return list;
+  if(Array.isArray(plugin)) list.push(...plugin);
+  if(Array.isArray(plugin.commands)) list.push(...plugin.commands);
+  if(Array.isArray(plugin.plugins)) list.push(...plugin.plugins);
+  if(plugin.name && typeof plugin.run==='function') list.push(plugin);
+  if(!list.length && typeof plugin==='object'){
+    for(let v of Object.values(plugin)){
+      if(v && v.name && typeof v.run==='function') list.push(v);
+      if(Array.isArray(v)) for(let c of v) if(c?.name && typeof c.run==='function') list.push(c);
+    }
+  }
+  return list;
+}
+function loadPlugins(){
+  commands.clear(); functionPlugins=[]; handlerMods=[];
+  // Support both Plugins and plugins - NEW METHOD uses plugins (small)
+  let dir = path.join(__dirname, 'plugins');
+  if(!fs.existsSync(dir) && fs.existsSync(path.join(__dirname, 'Plugins'))) dir = path.join(__dirname, 'Plugins');
+  if(!fs.existsSync(dir)) fs.mkdirSync(dir,{recursive:true});
+  const files = fs.readdirSync(dir).filter(f=>f.endsWith('.js')).sort();
+  for(const file of files){
+    try{
+      const fullPath = path.join(dir, file);
+      delete require.cache[require.resolve(fullPath)];
+      let plugin = require(fullPath);
+      if(plugin?.default) plugin = plugin.default;
+      let handlers = {};
+      let src = plugin || {};
+      let handlerSrc = src.handlers || src;
+      for(let k of ['handleAnti','handleAuto','handleProtection','handleParticipantProtection','handleMuted','handleStatus','handleParticipants','handleDelete','startAutoBio']){
+        if(typeof handlerSrc?.[k]==='function') handlers[k]=handlerSrc[k];
+        if(typeof src?.[k]==='function') handlers[k]=src[k];
+      }
+      if(Object.keys(handlers).length) handlerMods.push({ file, handlers });
+      if(typeof plugin==='function'){ functionPlugins.push({file, fn:plugin}); console.log(`✅ Loaded ${file}: function plugin`); continue; }
+      if(plugin && typeof plugin.handler==='function'){ functionPlugins.push({file, fn:plugin.handler}); }
+      let list = extractCommands(plugin);
+      let added=0;
+      for(const command of list){
+        if(!command?.name || typeof command.run!=='function') continue;
+        let name=command.name.toLowerCase();
+        if(commands.has(name)){ console.log(`⚠️ Duplicate ${name} in ${file} - skipping`); continue; }
+        commands.set(name, command); added++;
+        if(Array.isArray(command.aliases)){
+          for(let alias of command.aliases){
+            let a=String(alias).toLowerCase();
+            if(!commands.has(a)) commands.set(a, command);
+          }
+        }
+      }
+      console.log(`✅ Loaded ${file}: ${added} commands`);
+    }catch(e){ console.log(`❌ Plugin error ${file}:`, e.message); }
+  }
+  console.log(`📦 Commands loaded: ${commands.size}`);
+  console.log(`⚙️ Function plugins: ${functionPlugins.length} | Handler mods: ${handlerMods.length}`);
+}
+loadPlugins();
+function getHandler(name){
+  let out=[];
+  for(let m of handlerMods) if(m.handlers[name]) out.push(m.handlers[name]);
+  return out;
+}
+app.get('/ping',(req,res)=>res.send('pong'));
+app.get('/status',(req,res)=>res.json({connected:Boolean(sock?.user), user:sock?.user?.id||null, commands:commands.size, mode:getMode(db)}));
+// NEW METHOD PAIR - GET /pair?number=
+app.get('/pair', async (req,res)=>{
+  try{
+    const number=String(req.query.number||req.query.phone||'').replace(/[^0-9]/g,'');
+    if(!number || number.length<9) return res.status(400).json({error:'Invalid phone number'});
+    if(!sock) return res.status(503).json({error:'Bot is starting. Try again shortly.'});
+    if(sock.user) return res.status(409).json({error:'This bot session is already connected.'});
+    const code=await sock.requestPairingCode(number);
+    return res.json({code, success:true});
+  }catch(e){ console.log('Pairing error:', e.message); return res.status(500).json({error:'Pairing failed. Try again.'}); }
 });
-
-// GET version for Pair Page - same logic as POST, no retry, no restart
-app.get("/pair-code", async (req, res) => {
-  try {
-    if (!sock) await startBot();
-    await new Promise(r => setTimeout(r, 2000));
-    const number = (req.query.phone || "").replace(/[^0-9]/g, "");
-    if (!number) return res.json({ success: false, error: "Enter number" });
-    const code = await sock.requestPairingCode(number);
-    console.log(`[PAIR VIA URL] ${number} -> ${code}`);
-    res.json({ success: true, code });
-  } catch (e) { console.log('[PAIR ERROR]', e.message); res.json({ success: false, error: e.message }); }
+// Alias for Pair Page - same NEW METHOD, different query name
+app.get('/pair-code', async (req,res)=>{
+  try{
+    const number=String(req.query.phone||req.query.number||'').replace(/[^0-9]/g,'');
+    if(!number || number.length<9) return res.json({success:false, error:'Invalid phone number'});
+    if(!sock) return res.json({success:false, error:'Bot is starting. Try again shortly.'});
+    if(sock.user) return res.json({success:false, error:'This bot session is already connected.'});
+    const code=await sock.requestPairingCode(number);
+    return res.json({code, success:true});
+  }catch(e){ console.log('Pairing error:', e.message); return res.json({success:false, error:'Pairing failed. Try again.'}); }
 });
-
-app.get("/api/status", (req, res) => {
-  res.json({ online: true, botName: config.botName, plugins: PLUGINS.commandPlugins.length, handlers: PLUGINS.messageHandlers.length, uptime: formatUptime(process.uptime()*1000), commands: PLUGINS.commandPlugins.map(p=>p.name) });
-});
-app.get("/api/plugins", (req, res) => {
-  res.json({ commands: PLUGINS.commandPlugins.map(p=>({name:p.name, file:p.file, alias:p.alias})), handlers: PLUGINS.messageHandlers.map(h=>h.file), total: PLUGINS.commandPlugins.length });
-});
-
-app.get("/pair", (req, res) => res.sendFile(path.join(publicDir, "index.html")));
-app.get("/", (req, res) => {
-  const file = path.join(publicDir, "index.html");
-  if (!fs.existsSync(file)) return res.send(`<h2>LOVE Pair</h2><p>index.html not found in ${publicDir}</p>`);
-  res.sendFile(file);
-});
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Server on " + PORT));
-startBot();
+app.get('/api/status',(req,res)=>res.json({online:true, botName:config.botName, connected:Boolean(sock?.user), commands:commands.size, mode:getMode(db)}));
+app.get('/',(req,res)=>res.sendFile(path.join(publicDir,'index.html')));
+app.listen(PORT,()=>console.log(`🌐 Server running on port ${PORT}`));
+setInterval(async()=>{ try{ const url=process.env.RENDER_EXTERNAL_URL||`http://localhost:${PORT}`; await fetch(`${url}/ping`); }catch{} }, 4*60*1000);
+async function getGroupPermissions(from, sender, senderPn){
+  try{
+    const metadata = await sock.groupMetadata(from);
+    const participants = metadata.participants||[];
+    const sNums = getNums(sender, senderPn);
+    const bNums = getNums(sock?.user?.id, sock?.user?.lid, sock?.user?.pn);
+    const findByNums = (nums) => participants.find(p=>{
+      const pNums = getNums(p.id, p.phoneNumber, p.lid);
+      return nums.some(n=> pNums.includes(n)) || pNums.some(n=> nums.includes(n));
+    });
+    let participant = findByNums(sNums);
+    let bot = findByNums(bNums);
+    if(!participant && F.findParticipant) participant = F.findParticipant(metadata, sender) || F.findParticipant(metadata, senderPn);
+    if(!bot && F.findParticipant) bot = F.findParticipant(metadata, sock?.user?.id) || F.findParticipant(metadata, sock?.user?.lid);
+    const isAdmin = ['admin','superadmin'].includes(participant?.admin);
+    const isBotAdmin = ['admin','superadmin'].includes(bot?.admin);
+    return { isAdmin, isBotAdmin, metadata, participant, bot };
+  }catch(e){ return {isAdmin:false,isBotAdmin:false,metadata:null}; }
+}
+async function builtInAntiLink(sock, m, from, sender, senderPn, body, perms, isOwner){
+  if(!isOwner && perms.isAdmin) return false;
+  const anti = db.anti?.[from] || db.group?.[from];
+  const on = anti?.antilink || anti?.antiLink || anti?.antilinkEnabled;
+  if(!on) return false;
+  const linkRegex = /(https?:\/\/|www\.|chat\.whatsapp\.com\/|wa\.me\/|t\.me\/|telegram\.me\/|discord\.gg\/|instagram\.com\/|youtube\.com\/|youtu\.be\/)/i;
+  if(!linkRegex.test(body)) return false;
+  await sock.sendMessage(from, { delete: m.key }).catch(()=>{});
+  if(!db.warns[from]) db.warns[from] = {};
+  const key = sender;
+  db.warns[from][key] = (db.warns[from][key]||0) + 1;
+  const count = db.warns[from][key];
+  F.saveDB(db);
+  if(count >= 3){
+    delete db.warns[from][key];
+    F.saveDB(db);
+    await sock.sendMessage(from, { text: `🚫 @${getNums(sender)[0]} don reach 3 warnings for sending link. Kicking...`, mentions:[sender] }).catch(()=>{});
+    if(perms.isBotAdmin){
+      await sock.groupParticipantsUpdate(from, [sender], 'remove').catch(e=>console.log('Kick failed:', e.message));
+    } else {
+      await sock.sendMessage(from, { text: `❌ I no fit kick - make bot admin first, then I go kick am.` }).catch(()=>{});
+    }
+  } else {
+    await sock.sendMessage(from, { text: `⚠️ @${getNums(sender)[0]} No link allowed here!\nWarning ${count}/3 - Next na kick.\nLink deleted ✅`, mentions:[sender] }).catch(()=>{});
+  }
+  return true;
+}
+async function builtInAuto(sock, m, from, db){
+  const auto = db.auto || {};
+  try{ if(auto.autoread || auto.read) await sock.readMessages([m.key]).catch(()=>{}); }catch{}
+}
+async function builtInAutoStatus(sock, message){
+  const auto = db.auto || {};
+  try{
+    if(auto.autoview || auto.autoviewstatus || auto.viewstatus) await sock.readMessages([message.key]).catch(()=>{});
+    if(auto.autolike || auto.autolikestatus) await sock.sendMessage('status@broadcast', { react: { text: '❤️', key: message.key } }).catch(()=>{});
+  }catch(e){ console.log('Auto status error:', e.message); }
+}
+async function start(){
+  if(isStarting) return; isStarting=true;
+  if(reconnectTimer){ clearTimeout(reconnectTimer); reconnectTimer=null; }
+  try{
+    const sessionFolder=config.sessionFolder || './Meta';
+    const { state, saveCreds } = await useMultiFileAuthState(sessionFolder);
+    const { version } = await fetchLatestBaileysVersion();
+    sock = makeWASocket({ version, logger:pino({level:'silent'}), browser:Browsers.macOS('Safari'), auth:state, printQRInTerminal:false, markOnlineOnConnect:true, syncFullHistory:false, shouldSyncHistoryMessage:()=>false, connectTimeoutMs:60000, keepAliveIntervalMs:10000, getMessage:async()=>undefined });
+    sock.ev.on('creds.update', saveCreds);
+    sock.ev.on('connection.update', async update=>{
+      const { connection, lastDisconnect } = update;
+      if(connection==='connecting') console.log('🔄 Connecting...');
+      if(connection==='open'){
+        isStarting=false; console.log('✅ LOVE CONNECTED - Commands:', commands.size);
+        for(let fn of getHandler('startAutoBio')){ try{ await fn(sock, db, config); }catch(e){ console.log('Auto bio error:', e.message); } }
+      }
+      if(connection==='close'){
+        isStarting=false;
+        const code=lastDisconnect?.error?.output?.statusCode;
+        console.log('Connection closed:', code);
+        if(code===DisconnectReason.loggedOut){ console.log('❌ Session logged out. Pair again.'); return; }
+        if(!reconnectTimer) reconnectTimer=setTimeout(()=>{ reconnectTimer=null; start(); },5000);
+      }
+    });
+    sock.ev.on('messages.upsert', async ({messages})=>{
+      for(let message of messages){
+        try{
+          if(message.key?.remoteJid!=='status@broadcast') continue;
+          await builtInAutoStatus(sock, message);
+          for(let fn of getHandler('handleStatus')) await fn(sock, message, db, F, config);
+        }catch(e){ console.log('Status handler error:', e.message); }
+      }
+    });
+    sock.ev.on('messages.update', async updates=>{
+      try{ for(let fn of getHandler('handleDelete')) await fn(sock, updates, db, F, config); }catch(e){ console.log('Anti-delete error:', e.message); }
+    });
+    sock.ev.on('group-participants.update', async update=>{
+      try{
+        for(let fn of getHandler('handleParticipantProtection')) await fn(sock, update, db, F, config);
+        let handled=false;
+        for(let fn of getHandler('handleParticipants')){ await fn(sock, update, db, F, config); handled=true; }
+        if(!handled){
+          const from=update.id; const group=db.group?.[from]; if(!group) return;
+          for(let participant of update.participants||[]){
+            let pn = F.getPn ? F.getPn(participant) : participant.split('@')[0];
+            try{ let md=await sock.groupMetadata(from); let p = F.findParticipant ? F.findParticipant(md, participant) : null; if(p?.phoneNumber) pn=getNums(p.phoneNumber)[0]; }catch{}
+            if(update.action==='add' && (group.welcome || db.auto?.autowelcome)){
+              let msg=(group.welcomeMsg||'👋 Welcome @user to *{group}*!\n\nType .menu').replace(/@user/g,`@${pn}`).replace(/\{group\}/g, update.subject||'group');
+              await sock.sendMessage(from,{text:msg, mentions:[participant]}).catch(()=>{});
+            }
+            if(update.action==='remove' && (group.goodbye || db.auto?.autogoodbye)){
+              let msg=(group.goodbyeMsg||'👋 Bye @user!').replace(/@user/g,`@${pn}`);
+              await sock.sendMessage(from,{text:msg, mentions:[participant]}).catch(()=>{});
+            }
+          }
+        }
+      }catch(e){ console.log('Group event error:', e.message); }
+    });
+    sock.ev.on('messages.upsert', async ({messages})=>{
+      for(let m of messages){
+        try{
+          if(!m?.message) continue;
+          const from=m.key.remoteJid; if(!from || from==='status@broadcast') continue;
+          const sender=m.key.participant || from;
+          const senderPn=m.key.participantPn || m.key.remoteJidAlt || sender;
+          const senderNums=getNums(sender, senderPn);
+          const pushname=m.pushName||'User';
+          const body=F.getText(m) || '';
+          const isGroup=F.isGroup(from);
+          let isOwner=isOwnerCheck(sender, senderPn, db);
+          if(m.key.fromMe){
+            let prefixes=getPrefixes();
+            if(!prefixes.some(p=>body.startsWith(p))) continue;
+            isOwner=true;
+          }
+          if(!isOwner && db.banned?.length && senderNums.some(n=>db.banned.includes(n))) continue;
+          let permissions={isAdmin:false,isBotAdmin:false,metadata:null};
+          if(isGroup) permissions=await getGroupPermissions(from, sender, senderPn);
+          if(isOwner) permissions.isAdmin=true;
+          if(!m.key.fromMe) await builtInAuto(sock, m, from, db);
+          let blockedByAnti = false;
+          if(!m.key.fromMe && isGroup && !isOwner){
+            blockedByAnti = await builtInAntiLink(sock, m, from, sender, senderPn, body, permissions, isOwner);
+            if(blockedByAnti){ F.saveDB(db); continue; }
+          }
+          if(!blockedByAnti && !m.key.fromMe){
+            try{
+              for(let fn of getHandler('handleMuted')){ let blocked=await fn(sock, m, db, F, config); if(blocked){ F.saveDB(db); blockedByAnti = true; break; } }
+              if(!blockedByAnti && !getHandler('handleMuted').length && isGroup && db.muted?.[from]?.length){
+                let hit=db.muted[from].some(x=> senderNums.includes(getNums(x)[0]) || x===sender || x===senderPn);
+                if(hit && !isOwner && !permissions.isAdmin){ await sock.sendMessage(from,{delete:m.key}).catch(()=>{}); blockedByAnti = true; }
+              }
+            }catch(e){ console.log('Muted handler error:', e.message); }
+            if(!blockedByAnti){
+              try{ for(let fn of getHandler('handleProtection')){ let blocked=await fn(sock, m, db, F, config); if(blocked){ F.saveDB(db); blockedByAnti = true; break; } } }catch(e){ console.log('Protection handler error:', e.message); }
+            }
+            if(!blockedByAnti){
+              try{ for(let fn of getHandler('handleAnti')){ let blocked=await fn(sock, m, db, F, config); if(blocked){ F.saveDB(db); blockedByAnti = true; break; } } }catch(e){ console.log('Anti handler error:', e.message); }
+            }
+            if(!blockedByAnti){
+              try{ for(let fn of getHandler('handleAuto')) await fn(sock, m, db, F, config); }catch(e){ console.log('Auto handler error:', e.message); }
+            }
+          }
+          if(blockedByAnti) continue;
+          if(getMode(db)==='private' && !isOwner) continue;
+          if(!body) continue;
+          const prefixes=getPrefixes();
+          const usedPrefix=prefixes.find(p=>body.startsWith(p));
+          if(!usedPrefix) continue;
+          const args=body.slice(usedPrefix.length).trim().split(/\s+/);
+          const cmdName=(args.shift()||'').toLowerCase();
+          const text=args.join(' ');
+          const reply=async (message, options={})=> sock.sendMessage(from,{text:String(message), ...options},{quoted:m});
+          const fancyReply=async (message, options={})=> reply(fancy(message), options);
+          if(['menu','help','allmenu'].includes(cmdName)){
+            try{
+              const menuText=getMenu({ownerName:config.ownerAlias, prefix:usedPrefix, botUser:config.botName, hosting:config.hosting});
+              return await sock.sendMessage(from,{image:{url:MENU_PFP}, caption:menuText},{quoted:m});
+            }catch(e){ return reply('Menu error: '+e.message); }
+          }
+          if(cmdName==='reload' && isOwner){ loadPlugins(); return reply(`✅ ${fancy('Plugins reloaded')}\nCommands: ${commands.size}`); }
+          const ctx={ sock, m, from, sender, senderNum:getNums(sender)[0], senderPn, senderNums, pushname, args, text, q:text, cmd:cmdName, cmdName, prefix:usedPrefix, isOwner, isGroup, isAdmin:permissions.isAdmin, isBotAdmin:permissions.isBotAdmin, metadata:permissions.metadata, db, config, F, reply, fancy, fancyReply };
+          let handled=false;
+          for(let plugin of functionPlugins){
+            try{ let result=await plugin.fn(sock, m, ctx); if(result){ handled=true; F.saveDB(db); break; } }catch(e){ console.log('Function plugin error:', plugin.file, e.message); }
+          }
+                   if(handled) continue;
+          const plugin=commands.get(cmdName);
+          if(!plugin){ await reply(`❌ Unknown command: ${usedPrefix}${cmdName}\nType ${usedPrefix}menu`); continue; }
+          if(plugin.ownerOnly && !isOwner){ await reply(config.messages?.ownerOnly || '❌ Owner only command.'); continue; }
+          if(plugin.groupOnly && !isGroup){ await reply(config.messages?.groupOnly || '❌ Group only command.'); continue; }
+          if(plugin.adminOnly && !permissions.isAdmin && !isOwner){ await reply('❌ Admins only.'); continue; }
+          if((plugin.botAdminOnly || plugin.botAdmin) && !permissions.isBotAdmin){ await reply('❌ The bot must be an admin. Make bot admin first.'); continue; }
+          try{ await plugin.run(ctx); }catch(e){ console.log(`Cmd ${cmdName} error:`, e.message); await reply(`❌ Command error: ${e.message}`); }
+          F.saveDB(db);
+        }catch(e){ console.log('Message handler error:', e.message); }
+      }
+    });
+  }catch(e){
+    console.log('Start failed:', e.message); isStarting=false;
+    if(!reconnectTimer) reconnectTimer=setTimeout(()=>{ reconnectTimer=null; start(); },5000);
+  }
+}
+start();
+process.on('uncaughtException', e=>console.log('Uncaught exception:', e.message));
+process.on('unhandledRejection', e=>console.log('Unhandled rejection:', e.message));
