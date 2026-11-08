@@ -1,13 +1,20 @@
 {
   "name": "love",
   "version": "1.0.0",
+  "description": "LOVE - WhatsApp Bot by Simon Tech",
   "main": "index.js",
-  "scripts": { "start": "node index.js" },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "alip-baileys": "1.0.3",
     "axios": "^1.7.2",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
-    "pino": "^8.21.0"
+    "pino": "^8.21.0",
+    "form-data": "^4.0.0"
   }
 }
