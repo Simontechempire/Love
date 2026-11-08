@@ -10,6 +10,19 @@ const app = express();
 const PORT = config.port;
 app.use(express.static(path.join(__dirname, 'Public')));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'Public', 'index.html')));
+app.get('/api/status', (req, res) => {
+  const { formatUptime } = require('./Lib/function');
+  res.json({
+    online: true,
+    botName: config.botName,
+    owner: config.ownerName,
+    uptime: formatUptime(process.uptime() * 1000),
+    plugins: plugins.length,
+    memory: (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(0) + ' MB',
+    version: config.version,
+    prefix: config.prefix,
+  });
+});
 app.listen(PORT, () => console.log(`[LOVE] Web on ${PORT}`));
 
 // ===== HELPERS =====
