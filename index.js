@@ -1,4 +1,4 @@
-// META AI MD - INDEX.JS - MATCHES CHANGED FUNCTION - SIMON TECH INC
+// LOVE - INDEX.JS - MATCHES CHANGED FUNCTION - SIMON TECH INC
 // lib/menu.js NOT TOUCHED - linking NOT TOUCHED
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, Browsers } = require('@whiskeysockets/baileys');
 const express = require('express');
@@ -16,24 +16,22 @@ let sock = null;
 let db = F.loadDB() || {};
 let isStarting = false;
 let reconnectTimer = null;
-// CHANGED: loadDB already sets defaults, don't overwrite saved prefix/mode
 if (!db.settings) db.settings = {};
 if (!db.anti) db.anti = {};
 if (!db.group) db.group = {};
 if (!db.auto) db.auto = {};
 if (!db.warns) db.warns = {};
-// Use F.fancy from changed function, fallback if missing
+// CHANGED: Name is LOVE
+if (!db.settings.botName) db.settings.botName = 'LOVE';
 const fancy = F.fancy || F.bold || ((t)=>String(t));
 F.fancy = fancy; F.bold = fancy;
 function getNums(...jids){
-  // Use F.getNums from changed function
   if(F.getNums) return F.getNums(...jids);
   let out=[];
   for(let j of jids){ let n=String(j||'').split('@')[0].split(':')[0].replace(/[^0-9]/g,''); if(n) out.push(n); }
   return [...new Set(out)];
 }
 function isOwnerCheck(sender, senderPn, database){
-  // CHANGED: Use F.isOwnerMessage / F.isOwner from changed function first
   try{
     if(F.isOwner && (F.isOwner(sender, database, senderPn) || F.isOwner(senderPn, database, sender))) return true;
   }catch{}
@@ -126,7 +124,7 @@ function getHandler(name){
   return out;
 }
 app.get('/ping',(req,res)=>res.send('pong'));
-app.get('/status',(req,res)=>res.json({connected:Boolean(sock?.user), user:sock?.user?.id||null, commands:commands.size, mode:getMode(db)}));
+app.get('/status',(req,res)=>res.json({connected:Boolean(sock?.user), user:sock?.user?.id||null, commands:commands.size, mode:getMode(db), botName:'LOVE'}));
 app.get('/pair', async (req,res)=>{
   try{
     const number=String(req.query.number||'').replace(/[^0-9]/g,'');
@@ -210,7 +208,7 @@ async function start(){
       const { connection, lastDisconnect } = update;
       if(connection==='connecting') console.log('🔄 Connecting...');
       if(connection==='open'){
-        isStarting=false; console.log('✅ META AI MD CONNECTED - Commands:', commands.size);
+        isStarting=false; console.log('✅ LOVE CONNECTED - Commands:', commands.size);
         for(let fn of getHandler('startAutoBio')){ try{ await fn(sock, db, config); }catch(e){ console.log('Auto bio error:', e.message); } }
       }
       if(connection==='close'){
@@ -241,7 +239,6 @@ async function start(){
         if(!handled){
           const from=update.id; const group=db.group?.[from]; if(!group) return;
           for(let participant of update.participants||[]){
-            // CHANGED: F.getPn now returns number only, so @${pn} works
             let pn = F.getPn ? F.getPn(participant) : participant.split('@')[0];
             try{ let md=await sock.groupMetadata(from); let p = F.findParticipant ? F.findParticipant(md, participant) : null; if(p?.phoneNumber) pn=getNums(p.phoneNumber)[0]; }catch{}
             if(update.action==='add' && (group.welcome || db.auto?.autowelcome)){
@@ -314,13 +311,11 @@ async function start(){
           const fancyReply=async (message, options={})=> reply(fancy(message), options);
           if(['menu','help','allmenu'].includes(cmdName)){
             try{
-              // MENU NOT TOUCHED - uses your lib/menu.js exactly
-              const menuText=getMenu({ownerName:config.ownerAlias, prefix:usedPrefix, botUser:config.botName, hosting:config.hosting});
+              const menuText=getMenu({ownerName:config.ownerAlias, prefix:usedPrefix, botUser:config.botName || 'LOVE', hosting:config.hosting});
               return await sock.sendMessage(from,{image:{url:MENU_PFP}, caption:menuText},{quoted:m});
             }catch(e){ return reply('Menu error: '+e.message); }
           }
           if(cmdName==='reload' && isOwner){ loadPlugins(); return reply(`✅ ${fancy('Plugins reloaded')}\nCommands: ${commands.size}`); }
-          // CHANGED: ctx now uses F from changed function - includes getTarget, downloadMedia, etc
           const ctx={ sock, m, from, sender, senderNum:getNums(sender)[0], senderPn, senderNums, pushname, args, text, q:text, cmd:cmdName, cmdName, prefix:usedPrefix, isOwner, isGroup, isAdmin:permissions.isAdmin, isBotAdmin:permissions.isBotAdmin, metadata:permissions.metadata, db, config, F, reply, fancy, fancyReply };
           let handled=false;
           for(let plugin of functionPlugins){
