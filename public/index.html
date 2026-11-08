@@ -7,12 +7,13 @@
 <style>
   *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',sans-serif}
   body{background:#0f0f0f;color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
-  .card{background:#1a1a1a;border:2px solid #ff2e63;border-radius:24px;padding:30px 24px;max-width:420px;width:100%;text-align:center;box-shadow:0 0 40px rgba(255,46,99,.25)}
+  .card{background:#1a1a1a;border:2px solid #ff2e63;border-radius:24px;padding:30px 24px;max-width:440px;width:100%;text-align:center;box-shadow:0 0 40px rgba(255,46,99,.25)}
   .pfp{width:180px;height:180px;border-radius:50%;border:4px solid #ff2e63;object-fit:cover}
   h1{font-size:32px;margin:16px 0 4px;letter-spacing:2px}
   h1 span{color:#ff2e63}
   .tag{color:#aaa;font-size:13px;margin-bottom:20px}
   .status{display:inline-block;background:#00c853;color:#fff;padding:6px 16px;border-radius:20px;font-size:13px;font-weight:700;margin-bottom:20px}
+  .status.off{background:#ff3b30}
   .box{background:#222;border-radius:14px;padding:14px;text-align:left;margin-bottom:12px;font-size:14px;line-height:1.8}
   .box b{color:#ff2e63}
   .btn{display:block;background:#ff2e63;color:#fff;text-decoration:none;padding:14px;border-radius:12px;font-weight:700;margin:10px 0;font-size:15px}
@@ -22,6 +23,9 @@
   .mini{background:#222;padding:12px;border-radius:12px;font-size:13px}
   .mini b{display:block;color:#ff2e63;font-size:18px}
   .footer{font-size:12px;color:#777;margin-top:18px}
+  .pair{background:#2a1a1a;border:1px dashed #ff2e63;border-radius:12px;padding:12px;margin:12px 0;font-size:13px;line-height:1.6}
+  .pair code{font-size:22px;letter-spacing:4px;color:#ff2e63;font-weight:800}
+  .live{font-size:12px;color:#00c853;margin-bottom:10px}
 </style>
 </head>
 <body>
@@ -29,17 +33,25 @@
     <img class="pfp" src="https://i.postimg.cc/9FDSRFWL/99f8f6a3bdf94a5e43d3e2975e9502fc.jpg" alt="Love Bot PFP" />
     <h1>◈ <span>LOVE</span> ◈</h1>
     <p class="tag">~*_Love_*~ | WhatsApp Bot by Simon Tech</p>
-    <span class="status">● ONLINE</span>
+    <span class="status" id="statusBadge">● CHECKING...</span>
+    <p class="live" id="liveText">Connecting to bot...</p>
     <div class="box">
       ➠ <b>Owner:</b> Simon Tech<br>
       ➠ <b>Number:</b> +234 807 156 9915<br>
       ➠ <b>Prefix:</b> .menu<br>
       ➠ <b>Version:</b> 1.0.0<br>
       ➠ <b>Pairing:</b> Only - No QR<br>
-      ➠ <b>Platform:</b> Render
+      ➠ <b>Platform:</b> Render<br>
+      ➠ <b>Uptime:</b> <span id="uptime">--</span><br>
+      ➠ <b>Plugins:</b> <span id="pluginCount">--</span><br>
+      ➠ <b>Memory:</b> <span id="memory">--</span>
+    </div>
+    <div class="pair" id="pairBox" style="display:none">
+      🔑 <b>Pairing Code</b><br>
+      <span style="font-size:12px;color:#aaa">Check Render logs for code, or enter phone below</span>
     </div>
     <div class="grid">
-      <div class="mini"><b>250+</b>Plugins</div>
+      <div class="mini"><b id="gridPlugins">350+</b>Plugins</div>
       <div class="mini"><b>24/7</b>Uptime</div>
       <div class="mini"><b>AI</b>GPT + Scribe</div>
       <div class="mini"><b>Fast</b>Downloader</div>
@@ -50,5 +62,26 @@
     <p style="font-size:13px;color:#aaa;margin-top:14px">💡 Tip: Type <b style="color:#fff">.menu</b> in WhatsApp to see all commands.</p>
     <p class="footer">© 2026 LOVE Bot • Made by Simon Tech<br>◈┈▉ *~*_Love_*~* ▉┄◈</p>
   </div>
+<script>
+async function update(){
+  try{
+    const r = await fetch('/api/status');
+    const d = await r.json();
+    document.getElementById('statusBadge').textContent = d.online ? '● ONLINE' : '● OFFLINE';
+    document.getElementById('statusBadge').className = 'status' + (d.online ? '' : ' off');
+    document.getElementById('liveText').textContent = '● Live - updated ' + new Date().toLocaleTimeString();
+    document.getElementById('uptime').textContent = d.uptime || '--';
+    document.getElementById('pluginCount').textContent = d.plugins || '--';
+    document.getElementById('gridPlugins').textContent = d.plugins || '350+';
+    document.getElementById('memory').textContent = d.memory || '--';
+  }catch(e){
+    document.getElementById('statusBadge').textContent = '● OFFLINE';
+    document.getElementById('statusBadge').className = 'status off';
+    document.getElementById('liveText').textContent = 'Bot not responding - check Render logs';
+  }
+}
+update();
+setInterval(update, 5000);
+</script>
 </body>
 </html>
