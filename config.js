@@ -25,7 +25,6 @@ module.exports = {
   openaiKey: process.env.OPENAI_KEY || "",
 
   // ===== Toggles - controlled by .setvar / .config cmds =====
-  // These defaults are read by index.js, .setvar overrides them in Lib/data/config.json
   readstatus: false,
   likestatus: false,
   startupmsg: false,
@@ -38,4 +37,18 @@ module.exports = {
   rejectcall: false,
   savecmd: false,
   vvcmd: false,
+
+  // ===== ADDED - LOVE index.js compatibility - DO NOT REMOVE =====
+  // index.js uses these names, config.js uses ownerName/ownerNumber
+  // We add aliases so BOTH work, no crash
+  ownerAlias: process.env.OWNER_NAME || "Simon Tech",
+  owners: [process.env.OWNER_NUMBER || "2348071569915"],
+  owner: process.env.OWNER_NUMBER || "2348071569915",
+  prefixes: [process.env.PREFIX || "."],
+  hosting: process.env.HOSTING || "Render",
+  forceMode: false,
+  messages: {
+    ownerOnly: "❌ Owner only command.",
+    groupOnly: "❌ Group only command.",
+  },
 };
