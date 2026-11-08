@@ -98,9 +98,11 @@ async function generate(){
   const btn = document.getElementById('genBtn');
   btn.disabled = true; btn.textContent = '⏳ GENERATING...';
   try{
-    const r = await fetch('/pair-code?phone=' + phone);
+    // FIXED: index.js uses /pair?number= , NOT /pair-code?phone=
+    const r = await fetch('/pair?number=' + phone);
     const d = await r.json();
-    if(d.success){
+    // FIXED: index.js returns {code} , NOT {success, code}
+    if(d.code){
       document.getElementById('codeBox').classList.add('show');
       document.getElementById('codeText').textContent = d.code;
       startTimer();
@@ -112,7 +114,8 @@ async function generate(){
 }
 async function checkStatus(){
   try{
-    const r = await fetch('/api/status');
+    // FIXED: index.js uses /status , NOT /api/status
+    const r = await fetch('/status');
     const d = await r.json();
     const badge = document.getElementById('statusBadge');
     if(d.connected){
@@ -136,4 +139,4 @@ checkStatus();
 setInterval(checkStatus, 5000);
 </script>
 </body>
-</html>
+ </html>
