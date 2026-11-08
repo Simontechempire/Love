@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const config = require('./config');
 
-// ===== Lib/function - case-proof + fallback (fixes Render MODULE_NOT_FOUND) =====
+// ===== Lib/function - case-proof + fallback =====
 let getBuffer, formatUptime, downloadMediaMessage;
 try {
   ({ getBuffer, formatUptime, downloadMediaMessage } = require('./Lib/function'));
@@ -22,14 +22,12 @@ try {
 }
 
 const app = express();
-// Render gives PORT via env, fallback to config.port / 3000
 const PORT = process.env.PORT || config.port || 3000;
 
 // ===== Public folder - case-proof =====
 let publicDir = path.join(__dirname, 'Public');
 if (!fs.existsSync(publicDir)) publicDir = path.join(__dirname, 'public');
 app.use(express.static(publicDir));
-app.get('/', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
 
 let plugins = [];
 
@@ -45,7 +43,7 @@ function normalize(str){
   return out.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
 }
 
-// ===== LOAD PLUGINS - case-proof + array support =====
+// ===== LOAD PLUGINS =====
 function loadPlugins() {
   const list = [];
   let dir = path.join(__dirname, 'Plugins');
@@ -57,9 +55,7 @@ function loadPlugins() {
       delete require.cache[require.resolve(path.join(dir, file))];
       const mod = require(path.join(dir, file));
       const arr = Array.isArray(mod) ? mod : Array.isArray(mod?.default) ? mod.default : mod?.name ? [mod] : [];
-      for(const p of arr){
-        if(p?.name && typeof p.run === 'function') list.push(p);
-      }
+      for(const p of arr){ if(p?.name && typeof p.run === 'function') list.push(p); }
     } catch (e) { console.log(`[PLUGIN ERROR] ${file}:`, e.message); }
   }
   console.log(`[LOVE] Loaded ${list.length} plugins from ${files.length} files`);
@@ -68,43 +64,44 @@ function loadPlugins() {
 plugins = loadPlugins();
 setInterval(()=>{ plugins = loadPlugins(); }, 60000);
 
-// ===== API + PAIR VIA URL =====
+// ===== RENDER URL = PAIR PAGE ONLY =====
+// / , /pair , /pair-code all go to pair page
+app.get('/', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+app.get('/pair', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+
 app.get('/api/status', (req, res) => {
-  res.json({ online: true, botName: config.botName, owner: config.ownerName, uptime: formatUptime(process.uptime()*1000), plugins: plugins.length, memory: (process.memoryUsage().heapUsed/1024/1024).toFixed(0)+' MB', version: config.version, prefix: config.prefix, connected: !!globalThis.__loveConnected });
+  res.json({ online: true, botName: config.botName, connected: !!globalThis.__loveConnected, uptime: formatUptime(process.uptime()*1000), plugins: plugins.length });
 });
 
+// Store last code so frontend can poll it
 let lastPairCode = null;
 let lastPairPhone = null;
 let lastPairError = null;
-app.get('/pair', (req, res) => {
-  res.send(`
-  <html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>LOVE Pair</title>
-  <style>body{background:#0f0f0f;color:#fff;font-family:sans-serif;text-align:center;padding:30px} .card{background:#1a1a1a;border:2px solid #ff2e63;border-radius:20px;padding:24px;max-width:400px;margin:auto} input{width:100%;padding:14px;border-radius:10px;border:none;margin:10px 0;font-size:16px} button{background:#ff2e63;color:#fff;border:none;padding:14px;width:100%;border-radius:10px;font-weight:700;font-size:16px} code{font-size:28px;letter-spacing:5px;color:#ff2e63;font-weight:800}</style>
-  </head><body><div class="card">
-  <h2>◈ <span style="color:#ff2e63">LOVE</span> ◈ Pair</h2>
-  <p>Enter your WhatsApp number to get pairing code</p>
-  <form action="/pair-code" method="get">
-    <input name="phone" placeholder="2348071569915" value="${lastPairPhone||config.ownerNumber||'2348071569915'}" required />
-    <button type="submit">Get Pairing Code</button>
-  </form>
-  ${lastPairCode ? `<p style="margin-top:20px">Your Code:<br><code>${lastPairCode}</code><br><br><small>WhatsApp > Linked Devices > Link with phone number > Enter this code<br>Code expires in 20s - refresh if e fail</small></p>` : lastPairError ? `<p style="color:#ff3b30;margin-top:16px">${lastPairError}</p>` : `<p style="color:#aaa;font-size:13px;margin-top:16px">Code will show here after you submit</p>`}
-  <p style="margin-top:20px"><a href="/" style="color:#ff2e63">Back to Dashboard</a></p>
-  </div></body></html>`);
-});
+let lastPairTime = 0;
+
 app.get('/pair-code', async (req, res) => {
   const phone = (req.query.phone||'').replace(/[^0-9]/g,'');
-  if(!phone) return res.redirect('/pair');
+  if(!phone) return res.json({ success: false, error: 'Enter phone number' });
   lastPairPhone = phone; lastPairCode = null; lastPairError = null;
   try{
-    if(!globalThis.__loveSock) throw new Error('Bot not started yet, wait 10s and try again');
+    if(!globalThis.__loveSock) throw new Error('Bot starting... wait 10 seconds and try again');
     if(globalThis.__loveConnected) throw new Error('Bot already connected! No need to pair again.');
-    lastPairCode = await globalThis.__loveSock.requestPairingCode(phone);
-    console.log(`[PAIR VIA URL] ${phone} -> ${lastPairCode}`);
-  }catch(e){ lastPairError = 'ERROR: '+e.message; console.log('[PAIR ERROR]', e.message); }
-  res.redirect('/pair');
+    const code = await globalThis.__loveSock.requestPairingCode(phone);
+    lastPairCode = code; lastPairTime = Date.now();
+    console.log(`[PAIR VIA URL] ${phone} -> ${code}`);
+    return res.json({ success: true, code: code, phone: phone });
+  }catch(e){
+    lastPairError = e.message;
+    console.log('[PAIR ERROR]', e.message);
+    return res.json({ success: false, error: e.message });
+  }
 });
 
-app.listen(PORT, () => console.log(`[LOVE] Web on ${PORT} - Dashboard: / , Pair: /pair`));
+app.get('/api/pair-status', (req, res) => {
+  res.json({ connected: !!globalThis.__loveConnected, code: lastPairCode, phone: lastPairPhone, error: lastPairError });
+});
+
+app.listen(PORT, () => console.log(`[LOVE] Web on ${PORT} - Pair URL: /`));
 
 async function startLove() {
   const { state, saveCreds } = await useMultiFileAuthState(config.sessionFolder);
@@ -119,21 +116,7 @@ async function startLove() {
   globalThis.__loveSock = sock;
   globalThis.__loveConnected = false;
   sock.ev.on('creds.update', saveCreds);
-
-  if (downloadMediaMessage) {
-    sock.downloadMediaMessage = (m) => downloadMediaMessage(sock, m);
-  }
-
-  if (!sock.authState.creds.registered) {
-    const phone = (config.ownerNumber||'').replace(/[^0-9]/g, '');
-    setTimeout(async () => {
-      try {
-        const code = await sock.requestPairingCode(phone);
-        lastPairCode = code; lastPairPhone = phone;
-        console.log(`\n========== LOVE PAIRING CODE ==========\nPhone: ${phone}\nCODE: ${code}\nPair URL: /pair\n========================================\n`);
-      } catch (e) { console.log('[PAIRING ERROR]', e.message); }
-    }, 3000);
-  }
+  if (downloadMediaMessage) sock.downloadMediaMessage = (m) => downloadMediaMessage(sock, m);
 
   sock.ev.on('connection.update', async (update) => {
     const { connection, lastDisconnect } = update;
@@ -151,9 +134,8 @@ async function startLove() {
     if (connection === 'close') {
       globalThis.__loveConnected = false;
       const reason = lastDisconnect?.error?.output?.statusCode;
-      const loggedOut = reason === DisconnectReason.loggedOut;
-      if (!loggedOut) { console.log('[LOVE] Reconnecting...'); setTimeout(()=>startLove(), 3000); }
-      else console.log('[LOVE] Logged out - Delete auth_love & re-pair via /pair');
+      if (reason !== DisconnectReason.loggedOut) { console.log('[LOVE] Reconnecting...'); setTimeout(()=>startLove(), 3000); }
+      else console.log('[LOVE] Logged out - Delete auth_love & re-pair via URL');
     }
   });
 
