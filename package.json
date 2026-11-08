@@ -7,14 +7,18 @@
     "start": "node index.js"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": "20.18.0"
   },
   "dependencies": {
-    "alip-baileys": "1.0.3",
+    "@whiskeysockets/baileys": "^6.7.18",
     "axios": "^1.7.2",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "pino": "^8.21.0",
-    "form-data": "^4.0.0"
+    "form-data": "^4.0.0",
+    "file-type": "^19.0.0",
+    "jimp": "^0.22.12",
+    "moment-timezone": "^0.5.45",
+    "node-fetch": "^2.7.0"
   }
 }
