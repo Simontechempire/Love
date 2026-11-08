@@ -1,57 +1,18 @@
+const os = require('os');
 const config = require('../config');
-const { getBuffer } = require('../Lib/function');
-
-const CATEGORIES = {
-  HELP: ['ᴍᴇɴᴜ', 'ʟɪꜱᴛ'],
-  AI: ['ɢᴘᴛ', 'ꜱᴄʀɪʙᴇ', 'ꜰᴏʀɢᴇ', 'ᴄʜᴀᴛʙᴏᴛ'],
-  ANIME: ['ᴀɴɪᴍᴇ', 'ᴡᴀɪꜰᴜ', 'ᴍᴀɴɢᴀ', 'ᴀɴɪᴍᴇǫᴜᴏᴛᴇ', 'ᴀɴɪᴍᴇɴᴇᴡꜱ', 'ᴄʜᴀʀᴀᴄᴛᴇʀ', 'ᴀɴɪᴍᴇꜱᴇᴀʀᴄʜ', 'ᴀɴɪᴍᴇᴡᴀᴛᴄʜ', 'ᴀɴɪᴍᴇɢɪꜰ', 'ꜱᴇᴀꜱᴏɴ', 'ᴀɴɪᴍᴇʀᴇᴄ', 'ᴀɪʀɪɴɢ'],
-  FUN: ['ꜱʟᴀᴘ', 'ʜᴜɢ', 'ᴋɪꜱꜱ', 'ᴘᴀᴛ', 'ᴄᴜᴅᴅʟᴇ', 'ᴛɪᴄᴋʟᴇ', 'ꜱᴘᴀɴᴋ', 'ꜰᴇᴇᴅ', 'ꜱᴍᴜɢ', 'ɴᴇᴋᴏ', 'ᴡᴀɪꜰᴜ', 'ᴍᴇᴏᴡ', 'ᴡᴏᴏꜰ', 'ɢᴏᴏꜱᴇ', 'ʟɪᴢᴀʀᴅ', 'ꜰᴏxɢɪʀʟ', 'ᴡᴀʟʟᴘᴀᴘᴇʀ', 'ɴɢɪꜰ', 'ᴘɪᴄᴋᴜᴘʟ', 'ʙʀᴇᴀᴋᴜᴘʟ', 'ᴡʏʀ', 'ɪɴꜱᴜʟᴛ', 'ᴇᴍᴏᴊɪᴍɪx'],
-  DOWNLOADER: ['ᴀᴜᴛᴏᴅʟ', 'ᴀᴘᴋ', 'ꜱᴜʙᴛɪᴛʟᴇ', 'ʏᴛᴠ', 'ʏᴛᴀ', 'ᴠɪᴅᴇᴏ', 'ᴘʟᴀʏ', 'ᴠɪᴅᴇᴏᴅᴏᴄ', 'ᴘʟᴀʏᴅᴏᴄ', 'ʏᴛᴠᴅᴏᴄ', 'ʏᴛᴀᴅᴏᴄ', 'ᴛᴛ', 'ᴛɪᴋ-ɪᴍɢ', 'ᴛᴡɪᴛᴛᴇʀ', 'ꜰʙ', 'ɪɴꜱᴛᴀ', 'ᴍᴇᴅɪᴀꜰɪʀᴇ', 'ɢᴅʀɪᴠᴇ', 'ɢɪᴛᴄʟᴏɴᴇ', 'ᴘɪɴᴛ'],
-  USER: ['ᴄᴀʟʟ-ʟɪɴᴋ', 'ꜰᴏʀᴡᴀʀᴅ', 'ᴍᴀᴛᴄʜ', 'ᴅᴇʟᴇᴛᴇ', 'ᴀʀᴄʜɪᴠᴇ', 'ᴜɴᴀʀᴄʜɪᴠᴇ', 'ᴊɪᴅ', 'ᴘᴘ', 'ʀᴇᴍᴏᴠᴇᴘᴘ', 'ᴄʟᴇᴀʀ', 'ᴘɪɴᴄʜᴀᴛ', 'ᴜɴᴘɪɴᴄʜᴀᴛ', 'ʙʟᴏᴄᴋ', 'ᴜɴʙʟᴏᴄᴋ', 'ʙʟᴏᴄᴋʟɪꜱᴛ', 'ꜱᴇᴛɴᴀᴍᴇ', 'ʙɪᴏ', 'ɢᴇᴛᴘᴘ'],
-  COMMUNITY: ['ᴄᴏᴍᴍɴᴀᴍᴇ', 'ᴄᴅᴇᴍᴏᴛᴇ', 'ᴄᴘʀᴏᴍᴏᴛᴇ', 'ᴄʀᴇᴀᴛᴇᴄᴏᴍᴍ', 'ʟɪɴᴋɢᴄ', 'ᴜɴʟɪɴᴋɢᴄ', 'ᴄɪɴꜰᴏ'],
-  BOT: ['ᴍᴜᴛᴇ-ᴜꜱᴇʀ', 'ᴜɴᴍᴜᴛᴇ-ᴜꜱᴇʀ', 'ᴘɪɴɢ', 'ʙᴀɴ', 'ᴜɴʙᴀɴ', 'ʙᴀɴʟɪꜱᴛ', 'ᴜᴘᴛɪᴍᴇ', 'ʀᴜɴᴛɪᴍᴇ', 'ꜱᴛᴀᴛꜱ', 'ᴏᴡɴᴇʀ', 'ʀᴇᴘᴏ', 'ᴜᴘᴅᴀᴛᴇ', 'ɪɢɴᴏʀᴇ', 'ᴀʟʟᴏᴡ', 'ʙᴏᴛ', 'ꜱᴄʜᴅʟᴄᴍᴅ'],
-  CONVERTER: ['ꜱᴛɪᴄᴋᴇʀ', 'ᴘʜᴏᴛᴏ', 'ᴘᴛᴠ', 'ᴛᴏᴍᴘ4', 'ɢɪꜰ', 'ᴛᴏᴍᴘ3', 'ʙʟᴀᴄᴋ', 'ʀᴏᴜɴᴅꜱᴛᴋ', 'ᴄɪʀᴄʟᴇꜱᴛᴋ', 'ᴛᴀᴋᴇ', 'ᴇxɪꜰ', 'ᴀɪᴛᴛꜱ', 'ᴅᴏᴄ', 'ᴛᴏᴠᴠ', 'ʙᴀꜱꜱ', 'ʙʟᴏᴡɴ', 'ᴅᴇᴇᴘ', 'ᴇᴀʀʀᴀᴘᴇ', 'ꜰᴀꜱᴛ', 'ꜰᴀᴛ', 'ɴɪɢʜᴛᴄᴏʀᴇ', 'ʀᴇᴠᴇʀꜱᴇ', 'ꜱǫᴜɪʀʀᴇʟ', 'ʀᴏʙᴏᴛ', 'ꜱʟᴏᴡ', 'ꜱᴍᴏᴏᴛʜ', 'ᴄʜɪᴘᴍᴜɴᴋ', 'ᴛʀᴇᴍᴏʟᴏ', 'ᴠɪʙʀᴀᴛᴏ', '8ᴅ', 'ᴇᴄʜᴏ', 'ꜰʟᴀɴɢᴇʀ'],
-  SEARCH: ['ᴀᴘᴋꜱᴇᴀʀᴄʜ', 'ꜱᴜʙᴛɪᴛʟᴇꜱᴇᴀʀᴄʜ', 'ᴡᴇʙꜱᴇᴀʀᴄʜ', 'ɪᴍɢ', 'ɴᴘᴍ', 'ꜱʜᴀᴢᴀᴍ'],
-  ECONOMY: ['ᴇᴄᴏɴᴏᴍʏ', 'ʙᴀʟ', 'ᴅᴀɪʟʏ', 'ᴅᴇᴘ', 'ᴡɪᴛʜ', 'ɢɪᴠᴇ', 'ᴡᴏʀᴋ', 'ʀᴏʙ', 'ʟʙ', 'ʀɪᴄʜ', 'ᴘᴏᴏʀ', 'ꜱʜᴏᴘ', 'ʙᴜʏ', 'ɪɴᴠ', 'ʙᴇɢ', 'ᴄʀɪᴍᴇ', 'ʟᴏᴀɴ', 'ᴘᴀʏʟᴏᴀɴ', 'ꜱʟᴏᴛꜱ', 'ꜱᴇʟʟ', 'ʜᴜɴᴛ', 'ᴍɪɴᴇ', 'ꜰɪꜱʜ', 'ᴜꜱᴇ', 'ɢɪꜰᴛ', 'ꜱᴛʀᴇᴀᴋ', 'ɢᴀᴍʙʟᴇ', 'ᴄᴏɪɴꜰʟɪᴘ', 'ɴᴇᴛᴡᴏʀᴛʜ', 'ꜰʟɪᴘ', 'ʜᴇɪꜱᴛ', 'ʙʟᴀᴄᴋᴊᴀᴄᴋ', 'ᴅɪᴄᴇ', 'ʀᴘꜱ', 'ᴛᴀx', 'ʙᴀɴᴋʀᴏʙ', 'ᴘʀᴏꜰɪʟᴇ'],
-  TEXTMAKER: ['ɴᴇᴏɴʟɪɢʜᴛ', 'ᴛʏᴘᴏɢʀᴀᴘʜʏ', 'ᴡᴇᴛɢʟᴀꜱꜱ', 'ʟɪɢʜᴛ', 'ᴘᴜʙɢᴛᴇxᴛ', 'ᴘᴜʙɢʟᴏɢᴏ', 'ᴠᴀʟᴏʀᴀɴᴛ', 'ᴄᴏᴅᴛᴇxᴛ', 'ʟᴏʟᴡʟᴘ', 'ᴀᴍᴏɴɢᴜꜱ', 'ᴀɴɢᴇʟ', 'ɢʀᴇᴇɴ', 'ɴᴇᴏɴᴛᴇxᴛ', 'ɢʟᴏᴡ', 'ʟɪɢʜᴛʙ', 'ɢʟɪᴛᴛᴇʀ', 'ᴡᴀᴛᴇʀᴄᴏʟᴏʀ', 'ᴘᴀᴘᴇʀ', 'ɢʟɪᴛᴄʜ', 'ᴍᴇᴛᴀʟ', 'ɢᴀʟᴀxʏ', 'ʙʟᴜᴇ', 'ɢᴀʟᴀxʏᴡ', 'ɢʟᴏꜱꜱʏ', 'ɢʟᴀꜱꜱ2', 'ɢʟᴏᴡ2', 'ᴡᴏᴏᴅ', 'ꜱʟɪɢʜᴛ', 'ꜱᴋᴇᴛᴄʜ', 'ᴢᴏᴅɪᴀᴄ', 'ꜰʟᴏʀᴀʟ', 'ʜᴀᴄᴋᴇʀ', 'ɴᴇᴏɴᴅᴠʟ', 'ᴄʀᴀᴄᴋ', 'ꜱᴄɪꜰɪ', 'ꜱᴀɴᴅ', 'ʟᴇᴛᴛᴇʀ', 'ɢᴀᴍɪɴɢ'],
-  GAME: ['ᴅᴇʟᴛᴛᴛ', 'ᴛᴛᴛ', 'ᴡᴄɢ', 'ᴅᴇʟᴡᴄɢ'],
-  GROUP: ['ᴊᴏɪɴ', 'ʟᴇᴀᴠᴇ', 'ɢᴘᴘ', 'ɢɴᴀᴍᴇ', 'ɢᴅᴇꜱᴄ', 'ᴀᴅᴅ', 'ᴋɪᴄᴋ', 'ᴛᴋɪᴄᴋ', 'ᴘʀᴏᴍᴏᴛᴇ', 'ᴅᴇᴍᴏᴛᴇ', 'ᴍᴜᴛᴇ', 'ᴜɴᴍᴜᴛᴇ', 'ɪɴᴠɪᴛᴇ', 'ʀᴇᴠᴏᴋᴇ', 'ᴛᴀɢ', 'ᴛᴀɢᴀʟʟ', 'ᴀʟʟ', 'ᴄʀᴇᴀᴛᴇɢᴄ', 'ʟᴏᴄᴋ', 'ᴜɴʟᴏᴄᴋ', 'ɢɪɴꜰᴏ', 'ᴇᴠᴇɴᴛꜱ', 'ᴀɴᴛɪʟɪɴᴋ', 'ᴀᴋɪᴄᴋ', 'ᴀɴᴛɪᴡᴏʀᴅ', 'ᴡᴀʀɴ', 'ᴀɴᴛɪɢᴍ', 'ᴀɴᴛɪɢᴄꜱᴛᴀᴛᴜꜱ', 'ᴀɴᴛɪʙᴏᴛ', 'ᴀɴᴛɪꜱᴘᴀᴍ', 'ᴀɴᴛɪᴛᴀɢ', 'ʀᴇꜱᴇᴛ', 'ᴋɪᴄᴋʀ', 'ɢᴄꜱᴛᴀᴛᴜꜱ', 'ʟɪꜱᴛʀᴇǫᴜᴇꜱᴛ', 'ᴀᴘᴘʀᴏᴠᴇ', 'ʀᴇᴊᴇᴄᴛ', 'ᴘɪᴄᴋ'],
-  TOOLS: ['ᴍꜱɢꜱ', 'ʟɪꜱᴛᴏɴʟɪɴᴇ', 'ʟɪꜱᴛᴏꜰꜰʟɪɴᴇ', 'ǫᴜᴏᴛᴇᴅ', 'ᴇʟᴇᴍᴇɴᴛ', 'ꜱᴇᴛᴄᴍᴅ', 'ᴅᴇʟᴄᴍᴅ', 'ʟɪꜱᴛᴄᴍᴅ', 'ᴅᴇʟᴄᴍᴅꜱ', 'ᴘᴇʀᴍɪᴛ', 'ᴍᴇɴᴛɪᴏɴ', 'ᴀꜰᴋ', 'ᴀʀᴇᴀᴄᴛ'],
-  IMAGE: ['ʀᴇᴍɪɴɪ', 'ɢꜰx', 'ɢꜰx2', 'ɢꜰx3', 'ɢꜰx4', 'ɢꜰx5', 'ɢꜰx6', 'ɢꜰx7', 'ɢꜰx8', 'ɢꜰx9', 'ɢꜰx10', 'ɢꜰx11', 'ɢꜰx12', 'ɪɴᴠᴇʀᴛ', 'ɴᴀᴛᴜʀᴇᴡʟᴘ'],
-  'IMAGE-MEME': ['ᴄᴀʀʙᴏɴ', 'ᴡᴀɴᴛᴇᴅ', 'ᴡᴀꜱᴛᴇᴅ', 'ʀᴀɪɴʙᴏᴡ', 'ᴛʀɪɢɢᴇʀ-ᴍᴇᴍᴇ', 'ʀɪᴘ-ᴍᴇᴍᴇ', 'ᴍɴᴍ', 'ᴊᴀɪʟ'],
-  PROCESS: ['ʀᴇꜱᴛᴀʀᴛ', 'ꜱʜᴜᴛᴅᴏᴡɴ', 'ᴘ-ꜱᴛᴀᴛᴜꜱ'],
-  MISC: ['ǫᴜᴏᴛᴇ', 'ꜰᴀᴄᴛ', 'ǫ', 'ᴇʙɪɴᴀʀʏ', 'ᴅʙɪɴᴀʀʏ'],
-  UTILITIES: ['ᴀᴅᴅɴᴏᴛᴇ', 'ᴅᴇʟɴᴏᴛᴇ', 'ᴀʟʟɴᴏᴛᴇꜱ', 'ɢᴇᴛɴᴏᴛᴇ', 'ᴅᴇʟᴀʟʟɴᴏᴛᴇ', 'ꜱꜱ', 'ꜱꜱᴛᴀʙ', 'ꜱꜱᴘʜᴏɴᴇ', 'ꜱꜱꜰᴜʟʟ', 'ᴛᴛꜱ', 'ᴀᴜᴅɪᴏ2ᴛᴇxᴛ', 'ᴡᴍ', 'ᴜʀʟ', 'ᴛᴇᴍᴘ-ᴜʀʟ', 'ʀᴇᴀᴅᴍᴏʀᴇ', 'ᴅᴇꜰɪɴᴇ', 'ᴡᴇᴀᴛʜᴇʀ', 'ᴛɪɴʏᴜʀʟ', 'ᴠᴠ', 'ᴘᴅꜰ', 'ᴄᴀʟᴄ', 'ᴛʀᴛ', 'ɴɢʟ', 'ɪᴘ', 'ᴡɪᴋɪ', 'ʙɪʙʟᴇ', 'ꜰᴏɴᴛ', 'ᴄᴏᴍᴘʀᴇꜱꜱ', 'ɢᴇᴛᴅᴇᴠɪᴄᴇ'],
-  PLUGINS: ['ᴘʟᴜɢɪɴ', 'ʀᴇᴍᴏᴠᴇ', 'ᴘʟᴜɢɪɴꜱ'],
-  CONFIG: ['ꜱᴇᴛᴠᴀʀ', 'ɢᴇᴛᴠᴀʀ', 'ᴅᴇʟᴠᴀʀ', 'ᴀʟʟᴠᴀʀ', 'ʀᴇᴀᴅꜱᴛᴀᴛᴜꜱ', 'ʟɪᴋᴇꜱᴛᴀᴛᴜꜱ', 'ꜱᴛᴀʀᴛᴜᴘᴍꜱɢ', 'ᴀʟᴡᴀʏꜱᴏɴʟɪɴᴇ', 'ᴀɴᴛɪᴅᴇʟᴇᴛᴇ', 'ᴀɴᴛɪᴇᴅɪᴛ', 'ᴀɴᴛɪᴇᴅɪᴛᴄʜᴀᴛ', 'ꜱᴀᴠᴇꜱᴛᴀᴛᴜꜱ', 'ᴄᴍᴅʀᴇᴀᴄᴛ', 'ʀᴇᴀᴅᴍꜱɢ', 'ʀᴇᴊᴇᴄᴛᴄᴀʟʟ', 'ꜱᴇᴛꜱᴜᴅᴏ', 'ᴅᴇʟꜱᴜᴅᴏ', 'ɢᴇᴛꜱᴜᴅᴏ', 'ꜱᴇᴛᴍᴏᴅ', 'ᴅᴇʟᴍᴏᴅ', 'ɢᴇᴛᴍᴏᴅꜱ', 'ᴍᴏᴅᴇ', 'ꜱᴛᴀᴛᴜꜱᴇᴍᴏᴊɪ', 'ꜱᴀᴠᴇᴄᴍᴅ', 'ᴠᴠᴄᴍᴅ'],
-  PRIVACY: ['ʟᴀꜱᴛꜱᴇᴇɴ', 'ᴏɴʟɪɴᴇ', 'ᴍʏᴘᴘ', 'ᴍʏꜱᴛᴀᴛᴜꜱ', 'ʀᴇᴀᴅ', 'ᴀʟʟᴏᴡ-ɢᴄᴀᴅᴅ'],
-  AUTOREPLY: ['ᴘꜰɪʟᴛᴇʀ', 'ᴘꜱᴛᴏᴘ', 'ɢꜰɪʟᴛᴇʀ', 'ɢꜱᴛᴏᴘ'],
-};
-
-module.exports = {
-  name: 'help',
-  alias: ['list'],
-  category: 'HELP',
-  run: async ({ sock, from, sender, args, pushName }) => {
-    const q = (args[0] || '').toUpperCase().replace('-', '-');
-    // .help <category> - e.g .help group, .help economy, .help ai
-    if (q && CATEGORIES[q]) {
-      const cmds = CATEGORIES[q].map(c => `┆ ◈ .${c}`).join('\n');
-      const text = `◈┈▉ \`Love\` ▉┄◈\n\n╭──────────◈\n┆ ◈ *${q}* - ${CATEGORIES[q].length} Commands\n${cmds}\n╰──────────◈\n\n> 💡 Tip: Type .menu for full menu\n\n◈┈▉ *~*_Love_*~* ▉┄◈`;
-      const pic = await getBuffer(config.botPic);
-      if (pic) return sock.sendMessage(from, { image: pic, caption: text, mentions: [sender] });
-      return sock.sendMessage(from, { text, mentions: [sender] });
-    }
-
-    // .help / .list - list all 24 categories
-    let list = `◈┈▉ \`Love\` ▉┄◈\n> ╭────↯\n> │ ➠ *Owner:* ${config.ownerName}\n> │ ➠ *User:* ${pushName}\n> │ ➠ *Categories:* 24\n> │ ➠ *Commands:* 368\n> ╰────↯\n\n`;
-    for (const [cat, cmds] of Object.entries(CATEGORIES)) {
-      list += `╭──────────◈\n┆ ◈ *${cat}* (${cmds.length})\n┆ ◈ .help ${cat.toLowerCase()}\n╰──────────◈\n\n`;
-    }
-    list += `> 💡 Example: .help group | .help economy | .help ai\n\n◈┈▉ *~*_Love_*~* ▉┄◈`;
-
-    const pic = await getBuffer(config.botPic);
-    if (pic) await sock.sendMessage(from, { image: pic, caption: list, mentions: [sender] });
-    else await sock.sendMessage(from, { text: list, mentions: [sender] });
+function fmt(ms){const s=Math.floor(ms/1000),d=Math.floor(s/86400),h=Math.floor((s%86400)/3600),m=Math.floor((s%3600)/60);return `${d}d ${h}h ${m}m ${s%60}s`;}
+function menuText(plugins, sender, pushName, filter){
+  const cats = {};
+  plugins.forEach(p=>{ if(filter && p.category.toLowerCase()!==filter.toLowerCase()) return; (cats[p.category]=cats[p.category]||[]).push(p); });
+  let t = `◈┈▉ \`Love\` ▉┄◈\n> ╭────↯\n> │ ➠ *Owner:* ${config.ownerName}\n> │ ➠ *User:* @${sender.split('@')[0]}\n> │ ➠ *Plugins:* ${plugins.length}\n> │ ➠ *Uptime:* ${fmt(process.uptime()*1000)}\n> │ ➠ *Memory:* ${(process.memoryUsage().heapUsed/1024/1024).toFixed(0)} MB / ${(os.totalmem()/1024/1024/1024).toFixed(0)} GB\n> │ ➠ *Version:* ${config.version||'1.0.0'}\n> │ ➠ *Platform:* ${os.platform()}\n> ╰────↯\n\n`;
+  for(const [cat, list] of Object.entries(cats)){
+    t += `╭──────────◈\n┆ ◈ *${cat}*\n`;
+    list.forEach(p=> t+=`┆ ◈ .${p.alias?.[0]||p.name}\n`);
+    t += `╰──────────◈\n\n`;
   }
-};
+  t += `> 💡 Tip: Use menu [category] for specific commands.\n\n◈┈▉ *~*_Love_*~* ▉┄◈`;
+  return t;
+}
+const menu = { name:'menu', alias:['ᴍᴇɴᴜ'], category:'HELP', run: async({sock,from,sender,text,plugins,pushName})=>{ await sock.sendMessage(from,{text:menuText(plugins,sender,pushName,text), mentions:[sender]}); }};
+const list = { name:'list', alias:['ʟɪꜱᴛ'], category:'HELP', run: async({sock,from,sender,text,plugins,pushName})=>{ await sock.sendMessage(from,{text:menuText(plugins,sender,pushName,text), mentions:[sender]}); }};
+module.exports=[menu,list];
