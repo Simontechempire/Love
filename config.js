@@ -1,5 +1,7 @@
 require('dotenv').config();
+
 module.exports = {
+  // ===== YOURS - kept exactly =====
   botName: process.env.BOT_NAME || "Love",
   version: "1.0.0",
   prefix: process.env.PREFIX || ".",
@@ -12,4 +14,28 @@ module.exports = {
   autoRead: false,
   autoStatus: false,
   alwaysOnline: true,
+
+  // ===== ADDED - needed by plugins/menu =====
+  repo: process.env.REPO || "https://github.com/SimonTech/Love",
+  sudo: process.env.SUDO ? process.env.SUDO.split(",") : [],
+  mods: [],
+  mode: process.env.MODE || "public", // public / private / self
+  statusEmoji: process.env.STATUS_EMOJI || "❤️",
+  imgbbKey: process.env.IMGBB_KEY || "",
+  openaiKey: process.env.OPENAI_KEY || "",
+
+  // ===== Toggles - controlled by .setvar / .config cmds =====
+  // These defaults are read by index.js, .setvar overrides them in Lib/data/config.json
+  readstatus: false,
+  likestatus: false,
+  startupmsg: false,
+  antidelete: false,
+  antiedit: false,
+  antieditchat: false,
+  savestatus: false,
+  cmdreact: false,
+  readmsg: false,
+  rejectcall: false,
+  savecmd: false,
+  vvcmd: false,
 };
