@@ -1,5 +1,5 @@
 // LOVE - INDEX.JS - MATCHES CHANGED FUNCTION - SIMON TECH INC
-// lib/menu.js NOT TOUCHED - linking NOT TOUCHED
+// lib/menu.js NOT TOUCHED - linking FIXED
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, Browsers } = require('@whiskeysockets/baileys');
 const express = require('express');
 const path = require('path');
@@ -10,7 +10,6 @@ const F = require('./lib/function');
 const { getMenu, MENU_PFP } = require('./lib/menu');
 const app = express();
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
 const PORT = config.port || process.env.PORT || 10000;
 let sock = null;
 let db = F.loadDB() || {};
@@ -21,7 +20,6 @@ if (!db.anti) db.anti = {};
 if (!db.group) db.group = {};
 if (!db.auto) db.auto = {};
 if (!db.warns) db.warns = {};
-// CHANGED: Name is LOVE
 if (!db.settings.botName) db.settings.botName = 'LOVE';
 const fancy = F.fancy || F.bold || ((t)=>String(t));
 F.fancy = fancy; F.bold = fancy;
@@ -123,19 +121,45 @@ function getHandler(name){
   for(let m of handlerMods) if(m.handlers[name]) out.push(m.handlers[name]);
   return out;
 }
+
+// ===== LOVE - WEB ROUTES - PAIRING FIXED =====
 app.get('/ping',(req,res)=>res.send('pong'));
 app.get('/status',(req,res)=>res.json({connected:Boolean(sock?.user), user:sock?.user?.id||null, commands:commands.size, mode:getMode(db), botName:'LOVE'}));
+app.get('/api/status',(req,res)=>res.json({connected:Boolean(sock?.user), user:sock?.user?.id||null, commands:commands.size, mode:getMode(db), botName:'LOVE'}));
 app.get('/pair', async (req,res)=>{
   try{
-    const number=String(req.query.number||'').replace(/[^0-9]/g,'');
-    if(!number || number.length<9) return res.status(400).json({error:'Invalid phone number'});
-    if(!sock) return res.status(503).json({error:'Bot is starting. Try again shortly.'});
-    if(sock.user) return res.status(409).json({error:'This bot session is already connected.'});
+    const number=String(req.query.number || req.query.phone || '').replace(/[^0-9]/g,'');
+    if(!number || number.length<9) return res.status(400).json({error:'Invalid phone number', success:false});
+    if(!sock) return res.status(503).json({error:'Bot is starting. Wait 20s and try again.', success:false});
+    if(sock.user) return res.status(409).json({error:'This bot session is already connected.', success:false});
+    console.log('🔑 Pairing requested for:', number);
     const code=await sock.requestPairingCode(number);
-    return res.json({code});
-  }catch(e){ console.log('Pairing error:', e.message); return res.status(500).json({error:'Pairing failed. Try again.'}); }
+    console.log('✅ Pairing code generated:', code);
+    return res.json({code, success:true});
+  }catch(e){
+    console.log('Pairing error FULL:', e.message);
+    return res.status(500).json({error:'Pairing failed: ' + e.message, success:false});
+  }
+});
+app.get('/pair-code', async (req,res)=>{
+  try{
+    const number=String(req.query.phone || req.query.number || '').replace(/[^0-9]/g,'');
+    if(!number || number.length<9) return res.status(400).json({error:'Invalid phone number', success:false});
+    if(!sock) return res.status(503).json({error:'Bot is starting. Wait 20s and try again.', success:false});
+    if(sock.user) return res.status(409).json({error:'This bot session is already connected.', success:false});
+    const code=await sock.requestPairingCode(number);
+    return res.json({code, success:true});
+  }catch(e){ console.log('Pairing error FULL:', e.message); return res.status(500).json({error:'Pairing failed: ' + e.message, success:false}); }
+});
+app.get('/clear-session', async (req,res)=>{
+  try{
+    const folder = config.sessionFolder || './auth_love';
+    if(fs.existsSync(folder)) fs.rmSync(folder, {recursive:true, force:true});
+    return res.json({success:true, message:'Session cleared. Restart service on Render, then pair again.'});
+  }catch(e){ return res.status(500).json({error:e.message}); }
 });
 app.get('/',(req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
+app.use(express.static(path.join(__dirname, 'public')));
 app.listen(PORT,()=>console.log(`🌐 Server running on port ${PORT}`));
 setInterval(async()=>{ try{ const url=process.env.RENDER_EXTERNAL_URL||`http://localhost:${PORT}`; await fetch(`${url}/ping`); }catch{} }, 4*60*1000);
 async function getGroupPermissions(from, sender, senderPn){
@@ -199,7 +223,7 @@ async function start(){
   if(isStarting) return; isStarting=true;
   if(reconnectTimer){ clearTimeout(reconnectTimer); reconnectTimer=null; }
   try{
-    const sessionFolder=config.sessionFolder || './Meta';
+    const sessionFolder=config.sessionFolder || './auth_love';
     const { state, saveCreds } = await useMultiFileAuthState(sessionFolder);
     const { version } = await fetchLatestBaileysVersion();
     sock = makeWASocket({ version, logger:pino({level:'silent'}), browser:Browsers.macOS('Safari'), auth:state, printQRInTerminal:false, markOnlineOnConnect:true, syncFullHistory:false, shouldSyncHistoryMessage:()=>false, connectTimeoutMs:60000, keepAliveIntervalMs:10000, getMessage:async()=>undefined });
@@ -215,7 +239,15 @@ async function start(){
         isStarting=false;
         const code=lastDisconnect?.error?.output?.statusCode;
         console.log('Connection closed:', code);
-        if(code===DisconnectReason.loggedOut){ console.log('❌ Session logged out. Pair again.'); return; }
+        if(code===DisconnectReason.loggedOut){
+          console.log('❌ Session logged out. Clearing session so you fit pair again.');
+          try{
+            const folder = config.sessionFolder || './auth_love';
+            if(fs.existsSync(folder)) fs.rmSync(folder, {recursive:true, force:true});
+          }catch(e){}
+          setTimeout(()=>{ start(); }, 3000);
+          return;
+        }
         if(!reconnectTimer) reconnectTimer=setTimeout(()=>{ reconnectTimer=null; start(); },5000);
       }
     });
@@ -321,8 +353,7 @@ async function start(){
           for(let plugin of functionPlugins){
             try{ let result=await plugin.fn(sock, m, ctx); if(result){ handled=true; F.saveDB(db); break; } }catch(e){ console.log('Function plugin error:', plugin.file, e.message); }
           }
-          if(handled) continue;
-          const plugin=commands.get(cmdName);
+                    const plugin=commands.get(cmdName);
           if(!plugin){ await reply(`❌ Unknown command: ${usedPrefix}${cmdName}\nType ${usedPrefix}menu`); continue; }
           if(plugin.ownerOnly && !isOwner){ await reply(config.messages?.ownerOnly || '❌ Owner only command.'); continue; }
           if(plugin.groupOnly && !isGroup){ await reply(config.messages?.groupOnly || '❌ Group only command.'); continue; }
