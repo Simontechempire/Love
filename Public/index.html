@@ -12,20 +12,26 @@
   h1{font-size:32px;margin:16px 0 4px;letter-spacing:2px}
   h1 span{color:#ff2e63}
   .tag{color:#aaa;font-size:13px;margin-bottom:20px}
-  .status{display:inline-block;background:#00c853;color:#fff;padding:6px 16px;border-radius:20px;font-size:13px;font-weight:700;margin-bottom:20px}
+  .status{display:inline-block;background:#00c853;color:#fff;padding:6px 16px;border-radius:20px;font-size:13px;font-weight:700;margin-bottom:8px}
   .status.off{background:#ff3b30}
+  .status.wait{background:#ff9500}
   .box{background:#222;border-radius:14px;padding:14px;text-align:left;margin-bottom:12px;font-size:14px;line-height:1.8}
   .box b{color:#ff2e63}
-  .btn{display:block;background:#ff2e63;color:#fff;text-decoration:none;padding:14px;border-radius:12px;font-weight:700;margin:10px 0;font-size:15px}
+  .btn{display:block;background:#ff2e63;color:#fff;text-decoration:none;padding:14px;border-radius:12px;font-weight:700;margin:10px 0;font-size:15px;border:none;cursor:pointer;width:100%}
   .btn-outline{background:transparent;border:2px solid #ff2e63}
   .btn-green{background:#25D366}
+  .btn-gold{background:#ff9500;color:#000}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0}
   .mini{background:#222;padding:12px;border-radius:12px;font-size:13px}
   .mini b{display:block;color:#ff2e63;font-size:18px}
   .footer{font-size:12px;color:#777;margin-top:18px}
-  .pair{background:#2a1a1a;border:1px dashed #ff2e63;border-radius:12px;padding:12px;margin:12px 0;font-size:13px;line-height:1.6}
-  .pair code{font-size:22px;letter-spacing:4px;color:#ff2e63;font-weight:800}
+  .pair{background:#2a1a1a;border:1px dashed #ff2e63;border-radius:12px;padding:14px;margin:12px 0;font-size:13px;line-height:1.6}
+  .pair code{font-size:26px;letter-spacing:4px;color:#ff2e63;font-weight:800;display:block;margin:8px 0}
   .live{font-size:12px;color:#00c853;margin-bottom:10px}
+  .pair-form input{width:100%;padding:13px;border-radius:10px;border:none;margin:10px 0;font-size:16px;background:#111;color:#fff;text-align:center}
+  .pair-form button{width:100%;padding:13px;border-radius:10px;border:none;background:#ff2e63;color:#fff;font-weight:700;font-size:15px;cursor:pointer}
+  .steps{text-align:left;font-size:13px;color:#ccc;line-height:1.7;margin-top:10px}
+  .steps b{color:#fff}
 </style>
 </head>
 <body>
@@ -33,7 +39,7 @@
     <img class="pfp" src="https://i.postimg.cc/9FDSRFWL/99f8f6a3bdf94a5e43d3e2975e9502fc.jpg" alt="Love Bot PFP" />
     <h1>◈ <span>LOVE</span> ◈</h1>
     <p class="tag">~*_Love_*~ | WhatsApp Bot by Simon Tech</p>
-    <span class="status" id="statusBadge">● CHECKING...</span>
+    <span class="status wait" id="statusBadge">● CHECKING...</span>
     <p class="live" id="liveText">Connecting to bot...</p>
     <div class="box">
       ➠ <b>Owner:</b> Simon Tech<br>
@@ -42,14 +48,30 @@
       ➠ <b>Version:</b> 1.0.0<br>
       ➠ <b>Pairing:</b> Only - No QR<br>
       ➠ <b>Platform:</b> Render<br>
+      ➠ <b>WhatsApp:</b> <span id="waStatus">--</span><br>
       ➠ <b>Uptime:</b> <span id="uptime">--</span><br>
       ➠ <b>Plugins:</b> <span id="pluginCount">--</span><br>
       ➠ <b>Memory:</b> <span id="memory">--</span>
     </div>
-    <div class="pair" id="pairBox" style="display:none">
-      🔑 <b>Pairing Code</b><br>
-      <span style="font-size:12px;color:#aaa">Check Render logs for code, or enter phone below</span>
+
+    <!-- PAIR VIA RENDER URL -->
+    <div class="pair" id="pairBox">
+      🔑 <b>Pair / Link Bot</b><br>
+      <span style="font-size:12px;color:#aaa" id="pairHint">Enter your WhatsApp number to get pairing code</span>
+      <form class="pair-form" action="/pair-code" method="get" id="pairForm">
+        <input name="phone" id="phoneInput" placeholder="2348071569915" value="2348071569915" required />
+        <button type="submit" id="pairBtn">Get Pairing Code</button>
+      </form>
+      <div id="pairResult" style="display:none"></div>
+      <div class="steps">
+        <b>How to link:</b><br>
+        1. Click Get Pairing Code<br>
+        2. Open WhatsApp > Settings > Linked Devices<br>
+        3. Tap <b>Link a Device</b> > <b>Link with phone number instead</b><br>
+        4. Enter the 8-digit code (expires in 20s)
+      </div>
     </div>
+
     <div class="grid">
       <div class="mini"><b id="gridPlugins">350+</b>Plugins</div>
       <div class="mini"><b>24/7</b>Uptime</div>
@@ -57,6 +79,7 @@
       <div class="mini"><b>Fast</b>Downloader</div>
     </div>
     <a class="btn" href="https://wa.me/2348071569915?text=.menu">💬 Open LOVE on WhatsApp</a>
+    <a class="btn btn-gold" href="/pair">🔑 Pair / Link Bot (Full Page)</a>
     <a class="btn btn-green" href="https://wa.me/2348071569915?text=Hi%20Love">📱 Chat Owner - Simon Tech</a>
     <a class="btn btn-outline" href="https://github.com/Simontechempire/Love">⭐ View on GitHub</a>
     <p style="font-size:13px;color:#aaa;margin-top:14px">💡 Tip: Type <b style="color:#fff">.menu</b> in WhatsApp to see all commands.</p>
@@ -67,17 +90,34 @@ async function update(){
   try{
     const r = await fetch('/api/status');
     const d = await r.json();
-    document.getElementById('statusBadge').textContent = d.online ? '● ONLINE' : '● OFFLINE';
-    document.getElementById('statusBadge').className = 'status' + (d.online ? '' : ' off');
+    const connected = d.connected;
+    const badge = document.getElementById('statusBadge');
+    if(connected){
+      badge.textContent = '● ONLINE + WHATSAPP CONNECTED';
+      badge.className = 'status';
+      document.getElementById('waStatus').textContent = '✅ Connected';
+      document.getElementById('waStatus').style.color = '#00c853';
+      document.getElementById('pairHint').textContent = 'Bot already connected! No need to pair again.';
+      document.getElementById('pairBtn').textContent = 'Already Connected ✅';
+    } else {
+      badge.textContent = '● ONLINE - WAITING FOR PAIR';
+      badge.className = 'status wait';
+      document.getElementById('waStatus').textContent = '⏳ Not Paired - Use Pair Below';
+      document.getElementById('waStatus').style.color = '#ff9500';
+      document.getElementById('pairHint').textContent = 'Enter your WhatsApp number to get pairing code';
+      document.getElementById('pairBtn').textContent = 'Get Pairing Code';
+    }
     document.getElementById('liveText').textContent = '● Live - updated ' + new Date().toLocaleTimeString();
     document.getElementById('uptime').textContent = d.uptime || '--';
     document.getElementById('pluginCount').textContent = d.plugins || '--';
     document.getElementById('gridPlugins').textContent = d.plugins || '350+';
     document.getElementById('memory').textContent = d.memory || '--';
   }catch(e){
-    document.getElementById('statusBadge').textContent = '● OFFLINE';
-    document.getElementById('statusBadge').className = 'status off';
+    const badge = document.getElementById('statusBadge');
+    badge.textContent = '● OFFLINE';
+    badge.className = 'status off';
     document.getElementById('liveText').textContent = 'Bot not responding - check Render logs';
+    document.getElementById('waStatus').textContent = '❌ Offline';
   }
 }
 update();
