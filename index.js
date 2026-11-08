@@ -65,18 +65,9 @@ async function startLove() {
   });
   sock.ev.on('creds.update', saveCreds);
 
-  // ===== DOWNLOAD HELPER - plugins use sock.downloadMediaMessage =====
-  sock.downloadMediaMessage = async (m) => {
-    try{
-      const { downloadContentFromMessage } = require('alip-baileys');
-      const msg = m?.message || m;
-      const type = m?.mtype || Object.keys(msg||{})[0];
-      const stream = await downloadContentFromMessage(msg[type] || msg, type.replace('Message',''));
-      let buf = Buffer.from([]);
-      for await (const chunk of stream) buf = Buffer.concat([buf, chunk]);
-      return buf;
-    }catch(e){ console.log('[DOWNLOAD ERR]', e.message); return null; }
-  };
+    // ===== DOWNLOAD HELPER =====
+  const { downloadMediaMessage } = require('./Lib/function');
+  sock.downloadMediaMessage = (m) => downloadMediaMessage(sock, m);
 
   if (!sock.authState.creds.registered) {
     const phone = config.ownerNumber.replace(/[^0-9]/g, '');
