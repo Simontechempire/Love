@@ -1,7 +1,7 @@
 // LOVE - INDEX.JS - SIMON TECH INC
 // Fully connected: config + public + lib/function + lib/menu + plugins + auto/anti
 
-require('dotenv').config();
+try { require('dotenv').config(); } catch {}
 
 const {
   default: makeWASocket,
