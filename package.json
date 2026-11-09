@@ -4,24 +4,17 @@
   "description": "LOVE WhatsApp Bot by Simon Tech Inc",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "node index.js"
-  },
-  "keywords": [
-    "whatsapp",
-    "bot",
-    "baileys",
-    "love"
-  ],
-  "author": "Simon Tech",
-  "license": "MIT",
-  "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.16",
-    "chalk": "^4.1.2",
-    "express": "^4.21.2",
-    "pino": "^9.6.0"
+    "start": "node index.js"
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.16",
+    "axios": "^1.7.9",
+    "chalk": "^4.1.2",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "pino": "^9.6.0"
   }
 }
