@@ -1,6 +1,7 @@
 const config = require('../config');
-const { getMenu } = require('../Lib/menu');
-const { getBuffer } = require('../Lib/function');
+const { getMenu } = require('../lib/menu');
+const { getBuffer } = require('../lib/function');
+
 module.exports = {
   name: 'menu',
   category: 'HELP',
